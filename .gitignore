@@ -1,0 +1,23 @@
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Rust / Tauri
+target/
+apps/desktop/src-tauri/gen/
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# Local application state
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
