@@ -129,26 +129,42 @@ impl LocalVault {
     }
 
     pub fn set_dirty_session(&self, dirty: bool) -> Result<(), String> {
+        self.set_bool_setting("dirty_session", dirty)
+    }
+
+    pub fn has_dirty_session(&self) -> Result<bool, String> {
+        self.get_bool_setting("dirty_session")
+    }
+
+    pub fn set_crash_reporting_consent(&self, consent: bool) -> Result<(), String> {
+        self.set_bool_setting("crash_reporting_consent", consent)
+    }
+
+    pub fn has_crash_reporting_consent(&self) -> Result<bool, String> {
+        self.get_bool_setting("crash_reporting_consent")
+    }
+
+    fn set_bool_setting(&self, key: &str, value: bool) -> Result<(), String> {
         self.connection
             .lock()
             .map_err(|_| "local database lock was poisoned".to_string())?
             .execute(
-                "INSERT INTO local_settings(key, value) VALUES ('dirty_session', ?1)
+                "INSERT INTO local_settings(key, value) VALUES (?1, ?2)
                  ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                [if dirty { "1" } else { "0" }],
+                params![key, if value { "1" } else { "0" }],
             )
             .map_err(|error| error.to_string())?;
         Ok(())
     }
 
-    pub fn has_dirty_session(&self) -> Result<bool, String> {
+    fn get_bool_setting(&self, key: &str) -> Result<bool, String> {
         let value: Option<String> = self
             .connection
             .lock()
             .map_err(|_| "local database lock was poisoned".to_string())?
             .query_row(
-                "SELECT value FROM local_settings WHERE key='dirty_session'",
-                [],
+                "SELECT value FROM local_settings WHERE key=?1",
+                [key],
                 |row| row.get(0),
             )
             .optional()
@@ -302,5 +318,10 @@ mod tests {
         assert!(vault.should_guard_exit());
         vault.set_dirty_session(false).unwrap();
         assert!(!vault.should_guard_exit());
+        assert!(!vault.has_crash_reporting_consent().unwrap());
+        vault.set_crash_reporting_consent(true).unwrap();
+        assert!(vault.has_crash_reporting_consent().unwrap());
+        vault.set_crash_reporting_consent(false).unwrap();
+        assert!(!vault.has_crash_reporting_consent().unwrap());
     }
 }

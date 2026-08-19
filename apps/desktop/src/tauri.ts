@@ -18,6 +18,7 @@ const inTauri = () => "__TAURI_INTERNALS__" in globalThis;
 let mockSnapshot: SimulationSnapshot = { state: "idle", progress: 0, elapsedMs: 0 };
 const mockHistory: LocalPlanRecord[] = [];
 const mockFavorites: LocalPlanRecord[] = [];
+let mockCrashReportingConsent = false;
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (inTauri()) {
@@ -129,6 +130,32 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
     }
     case "has_dirty_session":
       return false as T;
+    case "get_crash_reporting_consent":
+      return mockCrashReportingConsent as T;
+    case "set_crash_reporting_consent":
+      mockCrashReportingConsent = Boolean(args?.consent);
+      return undefined as T;
+    case "export_diagnostics":
+      return JSON.stringify(
+        {
+          schemaVersion: 1,
+          appVersion: "0.0.0-browser-preview",
+          platform: "browser-preview",
+          architecture: "unknown",
+          simulationState: mockSnapshot.state,
+          connection: {
+            validatedPath: "macos_ios27_same_lan",
+            networkDeviceCount: 2,
+            qualifiedNetworkDeviceCount: 1,
+            usbDeviceCount: 1,
+            usbQualification: "deferred",
+          },
+          containsLocationData: false,
+          containsDeviceIdentifiers: false,
+        },
+        null,
+        2,
+      ) as T;
     case "get_host_location":
       return browserGeolocation() as Promise<T>;
     default:
@@ -177,6 +204,9 @@ export const desktopApi = {
   deleteSavedPlan: (id: string, kind: SavedPlanKind) =>
     invoke<void>("delete_saved_plan", { id, kind }),
   exportDiagnostics: () => invoke<string>("export_diagnostics"),
+  getCrashReportingConsent: () => invoke<boolean>("get_crash_reporting_consent"),
+  setCrashReportingConsent: (consent: boolean) =>
+    invoke<void>("set_crash_reporting_consent", { consent }),
   hasDirtySession: () => invoke<boolean>("has_dirty_session"),
   recoverDirtySession: (choice: "restore" | "keep") =>
     invoke<void>("recover_dirty_session", { choice }),

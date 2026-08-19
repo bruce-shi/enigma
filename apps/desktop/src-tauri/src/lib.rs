@@ -8,7 +8,9 @@ mod storage;
 use std::sync::Arc;
 
 use device::{DeviceAdapter, DeviceRuntime};
-use model::{Coordinate, DeviceSummary, LocalPlanRecord, SimulationPlan, SimulationSnapshot};
+use model::{
+    Coordinate, DeviceSummary, DeviceTransport, LocalPlanRecord, SimulationPlan, SimulationSnapshot,
+};
 use simulation::SimulationController;
 use storage::LocalVault;
 use tauri::{Emitter, Manager, WindowEvent};
@@ -224,6 +226,19 @@ async fn has_dirty_session(state: tauri::State<'_, AppState>) -> Result<bool, St
 }
 
 #[tauri::command]
+fn get_crash_reporting_consent(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    state.vault.has_crash_reporting_consent()
+}
+
+#[tauri::command]
+fn set_crash_reporting_consent(
+    state: tauri::State<'_, AppState>,
+    consent: bool,
+) -> Result<(), String> {
+    state.vault.set_crash_reporting_consent(consent)
+}
+
+#[tauri::command]
 async fn recover_dirty_session(
     state: tauri::State<'_, AppState>,
     choice: String,
@@ -265,16 +280,74 @@ async fn resolve_exit(
 #[tauri::command]
 async fn export_diagnostics(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let snapshot = state.simulation.snapshot().await;
-    serde_json::to_string_pretty(&serde_json::json!({
+    let dirty_session = state.vault.has_dirty_session()?;
+    let crash_reporting_consent = state.vault.has_crash_reporting_consent()?;
+    let (devices, scan_error) = match state.device.list_devices().await {
+        Ok(devices) => (devices, None),
+        Err(error) => (Vec::new(), Some(classify_diagnostic_error(&error))),
+    };
+    serde_json::to_string_pretty(&diagnostics_document(
+        &snapshot,
+        &devices,
+        dirty_session,
+        crash_reporting_consent,
+        scan_error,
+    ))
+    .map_err(|error| error.to_string())
+}
+
+fn diagnostics_document(
+    snapshot: &SimulationSnapshot,
+    devices: &[DeviceSummary],
+    dirty_session: bool,
+    crash_reporting_consent: bool,
+    scan_error: Option<&str>,
+) -> serde_json::Value {
+    let network_device_count = devices
+        .iter()
+        .filter(|device| device.transport == DeviceTransport::Network)
+        .count();
+    let qualified_network_device_count = devices
+        .iter()
+        .filter(|device| device.is_validated_same_lan())
+        .count();
+    let usb_device_count = devices
+        .iter()
+        .filter(|device| device.transport == DeviceTransport::Usb)
+        .count();
+    serde_json::json!({
         "schemaVersion": 1,
         "appVersion": env!("CARGO_PKG_VERSION"),
         "platform": std::env::consts::OS,
         "architecture": std::env::consts::ARCH,
         "ideviceRevision": "63a341d7f624b5c1f2540e4cecb269151a2caf52",
         "simulationState": snapshot.state,
-        "containsLocationData": false
-    }))
-    .map_err(|error| error.to_string())
+        "dirtySession": dirty_session,
+        "crashReportingConsent": crash_reporting_consent,
+        "connection": {
+            "validatedPath": "macos_ios27_same_lan",
+            "networkDeviceCount": network_device_count,
+            "qualifiedNetworkDeviceCount": qualified_network_device_count,
+            "usbDeviceCount": usb_device_count,
+            "usbQualification": "deferred",
+            "scanErrorCode": scan_error
+        },
+        "containsLocationData": false,
+        "containsDeviceIdentifiers": false
+    })
+}
+
+fn classify_diagnostic_error(error: &str) -> &'static str {
+    let normalized = error.to_ascii_lowercase();
+    if normalized.contains("driver") || normalized.contains("usbmux") {
+        "APPLE_DRIVER_OR_USBMUX_UNAVAILABLE"
+    } else if normalized.contains("pair") || normalized.contains("trust") {
+        "PAIRING_UNAVAILABLE"
+    } else if normalized.contains("network") || normalized.contains("connect") {
+        "NETWORK_DISCOVERY_UNAVAILABLE"
+    } else {
+        "DEVICE_SCAN_FAILED"
+    }
 }
 
 pub fn run() {
@@ -340,10 +413,55 @@ pub fn run() {
             save_favorite,
             delete_saved_plan,
             has_dirty_session,
+            get_crash_reporting_consent,
+            set_crash_reporting_consent,
             recover_dirty_session,
             resolve_exit,
             export_diagnostics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Enigma");
+}
+
+#[cfg(test)]
+mod privacy_tests {
+    use super::*;
+    use crate::model::{DeviceState, SimulationState};
+
+    #[test]
+    fn diagnostics_omit_locations_and_device_identifiers() {
+        let snapshot = SimulationSnapshot {
+            state: SimulationState::Running,
+            point: Some(Coordinate {
+                latitude: 49.2827,
+                longitude: -123.1207,
+                altitude_meters: None,
+            }),
+            ..SimulationSnapshot::default()
+        };
+        let devices = vec![DeviceSummary {
+            id: "opaque-session-id".into(),
+            name: "Personal iPhone".into(),
+            model: Some("private-model".into()),
+            os_version: Some("27.0".into()),
+            os_build: Some("private-build".into()),
+            transport: DeviceTransport::Network,
+            state: DeviceState::Ready,
+            diagnostic_code: None,
+        }];
+        let serialized = diagnostics_document(&snapshot, &devices, true, false, None).to_string();
+        for forbidden in [
+            "49.2827",
+            "-123.1207",
+            "opaque-session-id",
+            "Personal iPhone",
+            "private-model",
+            "private-build",
+        ] {
+            assert!(!serialized.contains(forbidden));
+        }
+        assert!(serialized.contains("\"containsLocationData\":false"));
+        assert!(serialized.contains("\"containsDeviceIdentifiers\":false"));
+        assert!(serialized.contains("\"qualifiedNetworkDeviceCount\":1"));
+    }
 }

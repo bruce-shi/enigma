@@ -253,13 +253,18 @@ Evidence:
 
 Status: `in_progress`
 
+Implementation: complete for the validated same-LAN desktop path; production map
+publication, production R2 retention, and physical USB fallback remain pending.
+
 - [ ] Publish versioned global PMTiles, style, fonts, and sprites to R2
 - [x] Implement range-aware cached map Worker
 - [x] Add OSM attribution and dataset rollback
 - [x] Implement prior-paired same-LAN Wi-Fi discovery
-- [ ] Add USB fallback and network diagnostics
-- [ ] Add opt-in crash reporting and R2 retention
-- [ ] Complete privacy and location-data egress tests
+- [ ] Add USB fallback (deferred physical qualification)
+- [x] Add privacy-safe network diagnostics export
+- [x] Add local opt-in crash reporting and allowlisted authenticated delivery
+- [ ] Apply and verify 30-day crash-report R2 retention in production
+- [x] Complete privacy and location-data egress tests
 
 Exit criteria:
 
@@ -269,12 +274,21 @@ Exit criteria:
 
 Evidence:
 
-- Map Worker unit tests cover byte ranges and current/versioned cache behavior;
-  production R2 PMTiles, styles, fonts, and sprites are not yet published.
+- Map Worker unit tests cover byte ranges, query-string rejection, and current/versioned
+  map, style, font, and sprite rollback behavior. The dataset validator requires a
+  versioned PMTiles archive, MapLibre v8 style, OSM attribution, HTTPS-only references,
+  fonts, sprites, and emits a SHA-256 object manifest. Production R2 objects are not yet
+  published.
 - Prior-paired network discovery works on the local macOS host. Location-service
   compatibility is mixed between the two tested iOS versions; see M0 evidence.
-- The crash endpoint allowlists fields and stores reports in R2, but desktop consent,
-  bucket lifecycle policy, and egress testing remain open.
+- Desktop consent is off by default and persisted locally. Payload construction drops
+  raw errors and stack paths; desktop and server tests reject coordinates, device IDs,
+  UDIDs, names, email, and tokens. With login bypassed, consent performs no network
+  request until an authenticated endpoint and access token exist.
+- Safe diagnostics export contains only coarse host/runtime state and device counts;
+  a Rust test proves the source coordinate and device metadata never serialize.
+- Production crash-bucket lifecycle application and production map publication remain
+  deferred; exact handoff commands and privacy invariants are documented in `docs/`.
 
 ## M6 — Release Hardening
 
@@ -368,3 +382,6 @@ Evidence:
 | 2026-08-18 | M3–M4 | Local desktop browser-preview QA | Pass | Qualified/unqualified device gating, character-by-character coordinates, cooldown/repetition totals, oversized-route blocking, teleport/history, favorite save, route controls, joystick release-to-pause, GPX and recovery surfaces; no console warnings/errors |
 | 2026-08-18 | M3 | `tauri build --debug --bundles app`, bundle inspection, and native launch smoke | Pass | Debug `Enigma.app` launched; executable SHA-256 `ba692bbd…09ea`; location purpose string present; internal M0 probe absent; unsigned and unnotarized |
 | 2026-08-18 | M0 | `cargo check -p enigma-desktop --features m0-probe --bin m0-probe` | Pass | Feature-gated physical diagnostic remains buildable without shipping in Enigma.app |
+| 2026-08-18 | M5 | `corepack pnpm lint && pnpm check && pnpm test:run && pnpm build` | Pass | 45 JavaScript tests; map Worker dry run; desktop and website production builds |
+| 2026-08-18 | M5 | `cargo fmt --all -- --check && cargo test --workspace --all-targets` | Pass | Eight Rust tests, including diagnostics location and identifier omission |
+| 2026-08-18 | M5 | Local desktop browser-preview QA | Pass | Crash consent became enabled after initialization, persisted in the browser mock, diagnostics action remained responsive, and no console warnings/errors appeared |

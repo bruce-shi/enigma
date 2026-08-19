@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapView } from "./MapView";
+import { createCrashReport, submitCrashReport } from "./privacy";
 import { desktopApi, type LocalPlanRecord, type SavedPlanKind } from "./tauri";
 import {
   exportGpx,
@@ -89,34 +90,54 @@ export function App() {
   const [exitOpen, setExitOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [crashConsent, setCrashConsent] = useState(false);
   const joystickMovementRef = useRef<Promise<boolean> | undefined>(undefined);
 
-  const run = useCallback(async <T,>(operation: () => Promise<T>): Promise<T | undefined> => {
-    try {
-      setBusy(true);
-      setError(undefined);
-      return await operation();
-    } catch (cause) {
-      setError(errorMessage(cause));
-      return undefined;
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  const reportFailure = useCallback(
+    (cause: unknown) => {
+      void submitCrashReport({
+        consent: crashConsent,
+        endpoint: import.meta.env.VITE_CRASH_REPORT_URL,
+        report: createCrashReport(cause, "error"),
+      });
+    },
+    [crashConsent],
+  );
 
-  const runAction = useCallback(async (operation: () => Promise<void>): Promise<boolean> => {
-    try {
-      setBusy(true);
-      setError(undefined);
-      await operation();
-      return true;
-    } catch (cause) {
-      setError(errorMessage(cause));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  const run = useCallback(
+    async <T,>(operation: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        setBusy(true);
+        setError(undefined);
+        return await operation();
+      } catch (cause) {
+        setError(errorMessage(cause));
+        reportFailure(cause);
+        return undefined;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [reportFailure],
+  );
+
+  const runAction = useCallback(
+    async (operation: () => Promise<void>): Promise<boolean> => {
+      try {
+        setBusy(true);
+        setError(undefined);
+        await operation();
+        return true;
+      } catch (cause) {
+        setError(errorMessage(cause));
+        reportFailure(cause);
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [reportFailure],
+  );
 
   const refreshDevices = useCallback(async () => {
     const next = await run(desktopApi.listDevices);
@@ -145,6 +166,10 @@ export function App() {
         setDirtySession(dirty);
         setStartupRecoveryPending(dirty);
       })
+      .catch(() => undefined);
+    void desktopApi
+      .getCrashReportingConsent()
+      .then(setCrashConsent)
       .catch(() => undefined);
   }, [refreshDevices, refreshLibrary]);
 
@@ -414,6 +439,17 @@ export function App() {
     }
   };
 
+  const downloadDiagnostics = async () => {
+    const contents = await run(desktopApi.exportDiagnostics);
+    if (!contents) return;
+    downloadTextFile(contents, "enigma-diagnostics.json", "application/json");
+  };
+
+  const updateCrashConsent = async (consent: boolean) => {
+    if (!(await runAction(() => desktopApi.setCrashReportingConsent(consent)))) return;
+    setCrashConsent(consent);
+  };
+
   const onMapClick = (next: Coordinate) => {
     if (mode === "route") {
       setRoutePoints((current) => [...current, next]);
@@ -678,6 +714,26 @@ export function App() {
               Account and subscription enforcement is intentionally bypassed while the desktop
               workflow is completed.
             </p>
+            <label className="mt-4 flex items-start gap-2 rounded-xl bg-surface-tertiary p-3">
+              <input
+                checked={crashConsent}
+                className="mt-1"
+                disabled={busy}
+                onChange={(event) => void updateCrashConsent(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <span className="block font-medium">Share anonymous crash reports</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Opt-in is stored locally. Reports exclude coordinates, device identifiers, names,
+                  tokens, and stack paths. Delivery stays off until authenticated production access
+                  is configured.
+                </span>
+              </span>
+            </label>
+            <Button className="mt-3 w-full" onPress={downloadDiagnostics} variant="secondary">
+              <Download size={16} /> Export safe diagnostics
+            </Button>
           </Surface>
         </aside>
       </div>
@@ -1090,6 +1146,18 @@ function safeFileName(value: string): string {
       .replace(/[^a-z0-9._-]+/giu, "-")
       .replace(/^-+|-+$/gu, "") || "enigma-route"
   );
+}
+
+function downloadTextFile(contents: string, fileName: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([contents], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function errorMessage(error: unknown): string {

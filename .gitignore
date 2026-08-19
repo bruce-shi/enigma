@@ -2,9 +2,11 @@ node_modules/
 .pnpm-store/
 .turbo/
 dist/
+build/
 coverage/
 *.log
 .DS_Store
+.react-router/
 .env
 .env.*
 !.env.example

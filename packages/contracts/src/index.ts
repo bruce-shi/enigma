@@ -110,9 +110,8 @@ export interface DesktopActivation {
   revokedAt?: string;
 }
 
-export interface CrashReport {
+export interface CrashReportSubmission {
   schemaVersion: 1;
-  reportId: string;
   appVersion: string;
   platform: "macos" | "windows";
   osVersion: string;
@@ -125,6 +124,10 @@ export interface CrashReport {
   }>;
   coarseState: DeviceState | SimulationState;
   occurredAt: string;
+}
+
+export interface CrashReport extends CrashReportSubmission {
+  reportId: string;
 }
 
 export interface ApiError {

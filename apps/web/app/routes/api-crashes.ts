@@ -11,7 +11,7 @@ const frameSchema = z
   })
   .strict();
 
-const crashSchema = z
+export const crashSchema = z
   .object({
     schemaVersion: z.literal(1),
     appVersion: z.string().max(40),
