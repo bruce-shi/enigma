@@ -43,6 +43,13 @@ import { MapView } from "./MapView";
 import { createCrashReport, submitCrashReport } from "./privacy";
 import { desktopApi, type LocalPlanRecord, type SavedPlanKind } from "./tauri";
 import {
+  checkForDesktopUpdate,
+  type DesktopUpdateInfo,
+  evaluateUpdateInstall,
+  installPendingUpdate,
+  updaterConfigured,
+} from "./updates";
+import {
   exportGpx,
   formatDistance,
   formatDuration,
@@ -91,6 +98,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [crashConsent, setCrashConsent] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<DesktopUpdateInfo>();
+  const [updateMessage, setUpdateMessage] = useState<string>();
   const joystickMovementRef = useRef<Promise<boolean> | undefined>(undefined);
 
   const reportFailure = useCallback(
@@ -465,6 +474,36 @@ export function App() {
   const routeTooLong =
     (mode === "route" || mode === "gpx") &&
     Boolean(metrics && metrics.travelTimeMs / 1000 >= LOCATION_LIMITS.maxRouteSamples);
+  const updateGate = evaluateUpdateInstall({
+    dirtySession,
+    simulationState: snapshot.state,
+  });
+
+  const checkForUpdates = async () => {
+    if (!updaterConfigured()) {
+      setUpdateMessage("Update checks are disabled until this build has production signing keys.");
+      return;
+    }
+    const update = await run(checkForDesktopUpdate);
+    if (update === undefined) return;
+    setAvailableUpdate(update ?? undefined);
+    setUpdateMessage(update ? `Enigma ${update.version} is available.` : "Enigma is up to date.");
+  };
+
+  const installUpdate = async () => {
+    if (!updateGate.allowed) {
+      setError(updateGate.reason);
+      return;
+    }
+    const installed = await runAction(() =>
+      installPendingUpdate({
+        dirtySession,
+        simulationState: snapshot.state,
+        onProgress: setUpdateMessage,
+      }),
+    );
+    if (installed) setAvailableUpdate(undefined);
+  };
 
   return (
     <AppShell
@@ -734,6 +773,47 @@ export function App() {
             <Button className="mt-3 w-full" onPress={downloadDiagnostics} variant="secondary">
               <Download size={16} /> Export safe diagnostics
             </Button>
+          </Surface>
+
+          <Surface className="mt-4 p-4 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold">Desktop updates</h2>
+              <span className="rounded-full bg-surface-tertiary px-2 py-1 text-xs uppercase text-muted-foreground">
+                {import.meta.env.VITE_UPDATE_CHANNEL ?? "stable"}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Enigma verifies updater signatures. Installation is blocked until every simulated
+              location is restored, even if the route worker has already stopped.
+            </p>
+            {updateMessage && <p className="mt-3 text-xs">{updateMessage}</p>}
+            {availableUpdate && !updateGate.allowed && (
+              <p className="mt-2 text-xs font-medium text-warning">{updateGate.reason}</p>
+            )}
+            <div className="mt-3 flex gap-2">
+              <Button
+                className="flex-1"
+                isDisabled={!updaterConfigured() || busy}
+                onPress={checkForUpdates}
+                variant="secondary"
+              >
+                <RefreshCw size={16} /> Check
+              </Button>
+              {availableUpdate && (
+                <Button
+                  className="flex-1"
+                  isDisabled={!updateGate.allowed || busy}
+                  onPress={installUpdate}
+                >
+                  Install {availableUpdate.version}
+                </Button>
+              )}
+            </div>
+            {!updaterConfigured() && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Disabled in this unsigned development build.
+              </p>
+            )}
           </Surface>
         </aside>
       </div>

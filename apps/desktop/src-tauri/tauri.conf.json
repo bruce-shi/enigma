@@ -44,9 +44,7 @@
       }
     },
     "updater": {
-      "endpoints": [
-        "https://releases.enigma.example/stable/{{target}}/{{arch}}/{{current_version}}"
-      ],
+      "endpoints": ["https://releases.enigma.example/updater/stable/latest.json"],
       "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY"
     }
   }

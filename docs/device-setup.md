@@ -48,4 +48,6 @@ transport, command, result, and any diagnostic code in `MILESTONES.md`.
   discovery.
 - VPN subnets, Internet control, and iPhone personal-hotspot topology are not
   supported claims.
-- A Wi-Fi failure must never prevent USB fallback or the restore command.
+- The release target requires Wi-Fi failures never to prevent USB fallback, but USB is
+  disabled in the current build until physical qualification. Wi-Fi failures must not
+  prevent the restore command for an already selected same-LAN device.

@@ -7,6 +7,7 @@
     "build": "vite build",
     "check": "tsc --noEmit",
     "dev": "vite",
+    "release:check": "node scripts/verify-release-config.mjs --development && node scripts/validate-updater-manifest.mjs stable release/updater/stable.template.json --allow-placeholders && node scripts/validate-updater-manifest.mjs beta release/updater/beta.template.json --allow-placeholders",
     "tauri": "tauri",
     "test": "vitest",
     "test:run": "vitest run --passWithNoTests"

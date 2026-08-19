@@ -31,3 +31,8 @@ cargo test --workspace
 Cloud integrations require the bindings and secrets documented in each app's
 `.env.example` or `wrangler.jsonc`. Location data must remain local to the
 desktop application.
+
+Desktop operators should start with [`docs/desktop-setup.md`](./docs/desktop-setup.md),
+[`docs/compatibility.md`](./docs/compatibility.md), and
+[`docs/troubleshooting.md`](./docs/troubleshooting.md). Release signing and updater
+handoff live in [`docs/release-hardening.md`](./docs/release-hardening.md).

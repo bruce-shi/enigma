@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://releases.enigma.example/updater/beta/latest.json"]
+    }
+  }
+}

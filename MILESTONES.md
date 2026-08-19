@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-18
 Overall status: Implementation
-Current milestone: M3 — Desktop Core
+Current milestone: M6 — Release Hardening
 Next release: Desktop v1
 
 ## Status Rules
@@ -292,15 +292,21 @@ Evidence:
 
 ## M6 — Release Hardening
 
-Status: `not_started`
+Status: `in_progress`
+
+Implementation: complete for updater safety, release preflight, and operator
+documentation; physical qualification, signing, notarization, and manifest publication
+remain pending.
 
 - [ ] Complete physical host/iOS compatibility matrix
 - [ ] Sign and notarize macOS build
 - [ ] Sign Windows installer
-- [ ] Publish stable and beta updater manifests
-- [ ] Test update behavior during active simulations
-- [ ] Complete security, privacy, accessibility, and recovery reviews
-- [ ] Publish setup, troubleshooting, and compatibility documentation
+- [x] Create and validate stable and beta updater manifest templates
+- [ ] Publish signed stable and beta updater manifests
+- [x] Block update installation during active or dirty simulations
+- [ ] Physically test a signed update during and after an active simulation
+- [x] Complete automated security, privacy, accessibility, and recovery reviews
+- [x] Publish setup, troubleshooting, and compatibility documentation in-repository
 
 Exit criteria:
 
@@ -310,7 +316,26 @@ Exit criteria:
 
 Evidence:
 
-- Pending
+- Stable and beta Tauri configuration overlays create updater artifacts only for
+  release builds and point at separate HTTPS manifests. Development builds neither
+  request signing material nor contact updater endpoints.
+- Manifest validation requires valid SemVer/channel pairing, RFC 3339 dates, HTTPS
+  query-free URLs scoped to the expected channel, all macOS/Windows targets, and
+  non-placeholder signatures for production.
+- Nine updater tests prove install is allowed only with an idle simulation and a clear
+  durable recovery marker; starting, running, paused, stopping, restore-required,
+  error, and idle-but-dirty states all fail closed.
+- The release configuration preflight checks bundle targets, macOS minimum version,
+  updater permissions/endpoints, CSP invariants, and the location purpose string. Its
+  production mode correctly rejects the current `0.0.0` version and placeholder key.
+- The unsigned debug `.app` still bundles without release credentials. Local browser
+  QA shows the stable update panel, a disabled Check action, an explicit unsigned-build
+  explanation, and no console warnings/errors.
+- Setup, troubleshooting, compatibility claims, append-only physical matrix,
+  signing/notarization, updater publication, privacy, security, accessibility, and
+  recovery procedures are documented in `docs/`.
+- macOS signing/notarization, Windows signing, real updater artifacts, clean-machine
+  installs, and physical device/update acceptance remain unverified.
 
 ## M7 — Public V1
 
@@ -382,6 +407,11 @@ Evidence:
 | 2026-08-18 | M3–M4 | Local desktop browser-preview QA | Pass | Qualified/unqualified device gating, character-by-character coordinates, cooldown/repetition totals, oversized-route blocking, teleport/history, favorite save, route controls, joystick release-to-pause, GPX and recovery surfaces; no console warnings/errors |
 | 2026-08-18 | M3 | `tauri build --debug --bundles app`, bundle inspection, and native launch smoke | Pass | Debug `Enigma.app` launched; executable SHA-256 `ba692bbd…09ea`; location purpose string present; internal M0 probe absent; unsigned and unnotarized |
 | 2026-08-18 | M0 | `cargo check -p enigma-desktop --features m0-probe --bin m0-probe` | Pass | Feature-gated physical diagnostic remains buildable without shipping in Enigma.app |
-| 2026-08-18 | M5 | `corepack pnpm lint && pnpm check && pnpm test:run && pnpm build` | Pass | 45 JavaScript tests; map Worker dry run; desktop and website production builds |
+| 2026-08-18 | M5 | `corepack pnpm lint && pnpm check && pnpm test:run && pnpm build` | Pass | 51 JavaScript tests; map Worker dry run; desktop and website production builds |
 | 2026-08-18 | M5 | `cargo fmt --all -- --check && cargo test --workspace --all-targets` | Pass | Eight Rust tests, including diagnostics location and identifier omission |
 | 2026-08-18 | M5 | Local desktop browser-preview QA | Pass | Crash consent became enabled after initialization, persisted in the browser mock, diagnostics action remained responsive, and no console warnings/errors appeared |
+| 2026-08-19 | M6 | `pnpm --filter @enigma/desktop release:check` | Pass | Development release structure and stable/beta manifest templates validated; placeholders explicitly allowed only in this mode |
+| 2026-08-19 | M6 | Production release preflight without `--development` | Expected fail | Rejected version `0.0.0` and placeholder updater public key |
+| 2026-08-19 | M6 | `corepack pnpm lint && pnpm check && pnpm test:run` | Pass | 60 JavaScript tests, including nine updater safety cases |
+| 2026-08-19 | M6 | `pnpm tauri build --debug --bundles app` | Pass | Unsigned debug Enigma.app bundled without updater signing credentials |
+| 2026-08-19 | M6 | Local desktop browser-preview QA | Pass | Stable update surface visible; Check disabled in unsigned build; no console warnings/errors |
