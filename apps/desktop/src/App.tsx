@@ -1,0 +1,1097 @@
+import type {
+  Coordinate,
+  DeviceSummary,
+  RouteOptions,
+  SimulationPlan,
+  SimulationSnapshot,
+} from "@enigma/contracts";
+import { LOCATION_LIMITS } from "@enigma/contracts";
+import {
+  AppShell,
+  ConfirmExitDialog,
+  DeviceStatus,
+  EmptyState,
+  FormField,
+  RoutePanel,
+  Surface,
+} from "@enigma/ui";
+import { Button } from "@heroui/react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Download,
+  Gamepad2,
+  LocateFixed,
+  MapPinPlus,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Route as RouteIcon,
+  ShieldCheck,
+  Square,
+  Star,
+  Trash2,
+  Undo2,
+  Upload,
+  Wifi,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MapView } from "./MapView";
+import { desktopApi, type LocalPlanRecord, type SavedPlanKind } from "./tauri";
+import {
+  exportGpx,
+  formatDistance,
+  formatDuration,
+  parseCoordinateText,
+  parseGpx,
+  planPoints,
+  routeMetrics,
+} from "./workflows";
+
+type EditorMode = "teleport" | "route" | "joystick" | "gpx";
+
+const defaultSnapshot: SimulationSnapshot = {
+  state: "idle",
+  progress: 0,
+  elapsedMs: 0,
+};
+
+const modes: Array<{ id: EditorMode; label: string; icon: typeof MapPinPlus }> = [
+  { id: "teleport", label: "Teleport", icon: MapPinPlus },
+  { id: "route", label: "Route", icon: RouteIcon },
+  { id: "joystick", label: "Joystick", icon: Gamepad2 },
+  { id: "gpx", label: "GPX", icon: Upload },
+];
+
+export function App() {
+  const [devices, setDevices] = useState<DeviceSummary[]>([]);
+  const [selected, setSelected] = useState<DeviceSummary>();
+  const [point, setPoint] = useState<Coordinate>();
+  const [mapCenter, setMapCenter] = useState<Coordinate>();
+  const [routePoints, setRoutePoints] = useState<Coordinate[]>([]);
+  const [mode, setMode] = useState<EditorMode>("teleport");
+  const [activeMode, setActiveMode] = useState<EditorMode>();
+  const [speedKph, setSpeedKph] = useState(5);
+  const [speedProfile, setSpeedProfile] = useState<"constant" | "natural">("constant");
+  const [repetitions, setRepetitions] = useState(1);
+  const [roundTrip, setRoundTrip] = useState(false);
+  const [gpxName, setGpxName] = useState<string>();
+  const [favoriteName, setFavoriteName] = useState("");
+  const [favorites, setFavorites] = useState<LocalPlanRecord[]>([]);
+  const [history, setHistory] = useState<LocalPlanRecord[]>([]);
+  const [snapshot, setSnapshot] = useState(defaultSnapshot);
+  const [dirtySession, setDirtySession] = useState(false);
+  const [startupRecoveryPending, setStartupRecoveryPending] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const joystickMovementRef = useRef<Promise<boolean> | undefined>(undefined);
+
+  const run = useCallback(async <T,>(operation: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      setBusy(true);
+      setError(undefined);
+      return await operation();
+    } catch (cause) {
+      setError(errorMessage(cause));
+      return undefined;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const runAction = useCallback(async (operation: () => Promise<void>): Promise<boolean> => {
+    try {
+      setBusy(true);
+      setError(undefined);
+      await operation();
+      return true;
+    } catch (cause) {
+      setError(errorMessage(cause));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const refreshDevices = useCallback(async () => {
+    const next = await run(desktopApi.listDevices);
+    if (!next) return;
+    setDevices(next);
+    setSelected((current) =>
+      current ? next.find((device) => device.id === current.id) : undefined,
+    );
+  }, [run]);
+
+  const refreshLibrary = useCallback(async () => {
+    const result = await run(() =>
+      Promise.all([desktopApi.listFavorites(), desktopApi.listHistory()]),
+    );
+    if (!result) return;
+    setFavorites(result[0]);
+    setHistory(result[1]);
+  }, [run]);
+
+  useEffect(() => {
+    void refreshDevices();
+    void refreshLibrary();
+    void desktopApi
+      .hasDirtySession()
+      .then((dirty) => {
+        setDirtySession(dirty);
+        setStartupRecoveryPending(dirty);
+      })
+      .catch(() => undefined);
+  }, [refreshDevices, refreshLibrary]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void desktopApi
+        .getSimulationSnapshot()
+        .then((next) => {
+          setSnapshot(next);
+          if (next.point) setPoint(next.point);
+        })
+        .catch(() => undefined);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let unlisten: undefined | (() => void);
+    if ("__TAURI_INTERNALS__" in globalThis) {
+      void import("@tauri-apps/api/event").then(async ({ listen }) => {
+        unlisten = await listen("enigma://exit-requested", () => setExitOpen(true));
+      });
+    }
+    return () => unlisten?.();
+  }, []);
+
+  useEffect(() => {
+    if (startupRecoveryPending && selected) setRecoveryOpen(true);
+  }, [selected, startupRecoveryPending]);
+
+  const options = useMemo<RouteOptions>(
+    () => ({
+      speedKph,
+      speedProfile,
+      repetitions,
+      roundTrip,
+      updateIntervalMs: 1000,
+      ...(speedProfile === "natural" ? { naturalVariationSeed: 1 } : {}),
+    }),
+    [repetitions, roundTrip, speedKph, speedProfile],
+  );
+
+  const currentPlan = useMemo<SimulationPlan | null>(() => {
+    if (mode === "teleport") return point ? { kind: "teleport", point } : null;
+    if (mode === "joystick") {
+      return point ? { kind: "joystick", origin: point, speedKph, headingDegrees: 0 } : null;
+    }
+    if (routePoints.length < 2) return null;
+    return { kind: mode === "gpx" ? "gpx" : "path", points: routePoints, options };
+  }, [mode, options, point, routePoints, speedKph]);
+
+  const metrics = useMemo(
+    () =>
+      routePoints.length > 1 ? routeMetrics(routePoints, speedKph, repetitions, roundTrip) : null,
+    [repetitions, roundTrip, routePoints, speedKph],
+  );
+
+  const connect = async (deviceId: string) => {
+    const device = await run(() => desktopApi.connectDevice(deviceId));
+    if (!device) return;
+    setSelected(device);
+    if (startupRecoveryPending) setRecoveryOpen(true);
+  };
+
+  const locateComputer = async () => {
+    const location = await run(desktopApi.getHostLocation);
+    if (location) setMapCenter(location);
+  };
+
+  const startCurrent = useCallback(async () => {
+    if (!selected) {
+      setError("Select the validated same-LAN iPhone before starting a simulation");
+      return;
+    }
+    if (!currentPlan) {
+      setError(
+        mode === "route" || mode === "gpx"
+          ? "Add at least two route points"
+          : "Choose a coordinate first",
+      );
+      return;
+    }
+    if (!(await runAction(() => desktopApi.startSimulation(currentPlan)))) return;
+    setActiveMode(mode);
+    setDirtySession(true);
+    setSnapshot((current) => ({ ...current, state: "running" }));
+    await refreshLibrary();
+  }, [currentPlan, mode, refreshLibrary, runAction, selected]);
+
+  const control = useCallback(
+    async (action: "pause" | "resume" | "restart" | "stop") => {
+      if (!(await runAction(() => desktopApi.controlSimulation(action)))) return false;
+      setSnapshot((current) => ({
+        ...current,
+        state: action === "pause" ? "paused" : action === "stop" ? "restore_required" : "running",
+      }));
+      return true;
+    },
+    [runAction],
+  );
+
+  const driveJoystick = useCallback(
+    async (headingDegrees: number) => {
+      if (!selected || !point) {
+        setError("Select an iPhone and a starting coordinate first");
+        return false;
+      }
+      if (
+        activeMode === "joystick" &&
+        (snapshot.state === "running" || snapshot.state === "paused")
+      ) {
+        if (!(await runAction(() => desktopApi.updateJoystickHeading(headingDegrees))))
+          return false;
+        if (snapshot.state === "paused" && !(await control("resume"))) return false;
+        return true;
+      }
+      const plan: SimulationPlan = {
+        kind: "joystick",
+        origin: point,
+        speedKph,
+        headingDegrees,
+      };
+      if (!(await runAction(() => desktopApi.startSimulation(plan)))) return false;
+      setActiveMode("joystick");
+      setDirtySession(true);
+      setSnapshot((current) => ({ ...current, state: "running" }));
+      await refreshLibrary();
+      return true;
+    },
+    [activeMode, control, point, refreshLibrary, runAction, selected, snapshot.state, speedKph],
+  );
+
+  const pressJoystick = useCallback(
+    (headingDegrees: number) => {
+      const movement = driveJoystick(headingDegrees);
+      joystickMovementRef.current = movement;
+      return movement;
+    },
+    [driveJoystick],
+  );
+
+  const releaseJoystick = useCallback(async () => {
+    const movement = joystickMovementRef.current;
+    joystickMovementRef.current = undefined;
+    if (movement && (await movement)) await control("pause");
+  }, [control]);
+
+  useEffect(() => {
+    if (mode !== "joystick") return;
+    const headings: Record<string, number> = {
+      ArrowUp: 0,
+      w: 0,
+      ArrowRight: 90,
+      d: 90,
+      ArrowDown: 180,
+      s: 180,
+      ArrowLeft: 270,
+      a: 270,
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
+      const heading = headings[event.key];
+      if (heading === undefined || event.repeat) return;
+      event.preventDefault();
+      void pressJoystick(heading);
+    };
+    const keyup = (event: KeyboardEvent) => {
+      if (headings[event.key] === undefined) return;
+      event.preventDefault();
+      void releaseJoystick();
+    };
+    window.addEventListener("keydown", keydown);
+    window.addEventListener("keyup", keyup);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+    };
+  }, [mode, pressJoystick, releaseJoystick]);
+
+  const restore = async () => {
+    if (!selected) {
+      setError("Select the previously used iPhone before restoring its real location");
+      return;
+    }
+    if (!(await runAction(desktopApi.clearLocation))) return;
+    setSnapshot(defaultSnapshot);
+    setActiveMode(undefined);
+    setDirtySession(false);
+    setStartupRecoveryPending(false);
+    setRecoveryOpen(false);
+  };
+
+  const recover = async (choice: "restore" | "keep") => {
+    if (!(await runAction(() => desktopApi.recoverDirtySession(choice)))) return;
+    if (choice === "restore") {
+      setSnapshot(defaultSnapshot);
+      setActiveMode(undefined);
+      setDirtySession(false);
+    }
+    setStartupRecoveryPending(false);
+    setRecoveryOpen(false);
+  };
+
+  const loadPlan = (record: LocalPlanRecord) => {
+    const nextPoints = planPoints(record.plan);
+    setPoint(nextPoints[0]);
+    setRoutePoints(record.plan.kind === "path" || record.plan.kind === "gpx" ? nextPoints : []);
+    setMode(
+      record.plan.kind === "path" ? "route" : record.plan.kind === "gpx" ? "gpx" : record.plan.kind,
+    );
+    if (record.plan.kind === "path" || record.plan.kind === "gpx") {
+      setSpeedKph(record.plan.options.speedKph);
+      setSpeedProfile(record.plan.options.speedProfile);
+      setRepetitions(record.plan.options.repetitions);
+      setRoundTrip(record.plan.options.roundTrip);
+    } else if (record.plan.kind === "joystick") {
+      setSpeedKph(record.plan.speedKph);
+    }
+    if (nextPoints[0]) setMapCenter(nextPoints[0]);
+  };
+
+  const saveFavorite = async () => {
+    if (!currentPlan || !favoriteName.trim()) {
+      setError("Name the current point or route before saving it as a favorite");
+      return;
+    }
+    const favorite = await run(() => desktopApi.saveFavorite(favoriteName, currentPlan));
+    if (!favorite) return;
+    setFavoriteName("");
+    await refreshLibrary();
+  };
+
+  const deleteSaved = async (record: LocalPlanRecord, kind: SavedPlanKind) => {
+    if (!(await runAction(() => desktopApi.deleteSavedPlan(record.id, kind)))) return;
+    await refreshLibrary();
+  };
+
+  const importGpx = async (file?: File) => {
+    if (!file) return;
+    try {
+      setError(undefined);
+      const points = parseGpx(await file.text());
+      setRoutePoints(points);
+      setPoint(points[0]);
+      setMapCenter(points[0]);
+      setGpxName(file.name.replace(/\.gpx$/iu, ""));
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  };
+
+  const downloadGpx = () => {
+    try {
+      const contents = exportGpx(routePoints, gpxName ?? "Enigma route");
+      const url = URL.createObjectURL(new Blob([contents], { type: "application/gpx+xml" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${safeFileName(gpxName ?? "enigma-route")}.gpx`;
+      anchor.hidden = true;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  };
+
+  const onMapClick = (next: Coordinate) => {
+    if (mode === "route") {
+      setRoutePoints((current) => [...current, next]);
+      setPoint(next);
+      return;
+    }
+    setPoint(next);
+  };
+
+  const running = snapshot.state === "running";
+  const paused = snapshot.state === "paused";
+  const canRestart = activeMode && activeMode !== "teleport";
+  const routeTooLong =
+    (mode === "route" || mode === "gpx") &&
+    Boolean(metrics && metrics.travelTimeMs / 1000 >= LOCATION_LIMITS.maxRouteSamples);
+
+  return (
+    <AppShell
+      context={
+        selected
+          ? `${selected.name} · ${selected.transport === "network" ? "Wi-Fi beta" : "USB unqualified"}`
+          : "macOS · local access"
+      }
+      actions={
+        <>
+          <span className="hidden rounded-full bg-success/15 px-3 py-1 text-xs font-semibold text-success md:inline-flex">
+            Login bypassed
+          </span>
+          <Button isDisabled={busy} onPress={refreshDevices} variant="ghost">
+            <RefreshCw size={16} /> Refresh
+          </Button>
+        </>
+      }
+    >
+      <div className="grid min-h-[calc(100vh-4rem)] grid-cols-1 xl:grid-cols-[22rem_1fr_22rem]">
+        <aside className="border-r border-border bg-surface-secondary/40 p-4">
+          <RoutePanel title="1. Connect iPhone">
+            <ol className="mb-4 grid gap-2 text-sm text-muted-foreground">
+              <li>1. Use an iPhone already paired once by USB with this Mac.</li>
+              <li>2. Enable Developer Mode, unlock it, and join the same LAN.</li>
+              <li>3. Scan and select the iOS 27 device below.</li>
+            </ol>
+            {devices.length === 0 ? (
+              <EmptyState
+                title="No same-LAN iPhone found"
+                description="The validated path is macOS with a previously paired iOS 27 device on the same LAN. USB and Windows qualification remain deferred."
+                action={
+                  <Button onPress={refreshDevices}>
+                    <Wifi size={16} /> Scan same LAN
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="grid gap-2">
+                {devices.map((device) => {
+                  const validated =
+                    device.transport === "network" && device.osVersion?.startsWith("27.");
+                  const selectable = validated && device.state === "ready";
+                  return (
+                    <button
+                      className={`rounded-xl border bg-surface p-3 text-left transition-colors enabled:hover:border-accent disabled:cursor-not-allowed disabled:opacity-60 ${selected?.id === device.id ? "border-accent ring-2 ring-accent/20" : "border-border"}`}
+                      disabled={!selectable}
+                      key={device.id}
+                      onClick={() => void connect(device.id)}
+                      type="button"
+                    >
+                      <DeviceStatus {...device} />
+                      <p className={`mt-2 text-xs ${validated ? "text-success" : "text-warning"}`}>
+                        {validated
+                          ? `Validated same-LAN path · iOS ${device.osVersion}`
+                          : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · not qualified in this pass`}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </RoutePanel>
+
+          {dirtySession && (
+            <Surface className="mt-4 border-warning/50 p-4 text-sm">
+              <p className="font-semibold text-warning">A simulated location may be active</p>
+              <p className="mt-2 text-muted-foreground">
+                Select the same iPhone, then restore before starting another session.
+              </p>
+              <Button
+                className="mt-3 w-full"
+                isDisabled={!selected}
+                onPress={() => setRecoveryOpen(true)}
+                variant="secondary"
+              >
+                Review recovery
+              </Button>
+            </Surface>
+          )}
+
+          <LocalLibrary
+            favorites={favorites}
+            history={history}
+            onDelete={deleteSaved}
+            onLoad={loadPlan}
+          />
+        </aside>
+
+        <section className="relative min-h-[560px] bg-surface-tertiary">
+          <MapView
+            center={mapCenter}
+            onMapClick={onMapClick}
+            point={point}
+            routePoints={mode === "route" || mode === "gpx" ? routePoints : []}
+          />
+          <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
+            <Button onPress={locateComputer} variant="secondary">
+              <LocateFixed size={16} /> Center on this Mac
+            </Button>
+            {mode === "route" && routePoints.length > 0 && (
+              <Button
+                onPress={() => {
+                  setRoutePoints((current) => current.slice(0, -1));
+                }}
+                variant="secondary"
+              >
+                <Undo2 size={16} /> Undo point
+              </Button>
+            )}
+          </div>
+          {error && (
+            <div className="absolute bottom-4 left-4 right-4 z-10 rounded-xl border border-danger/40 bg-danger/90 p-3 text-sm text-white shadow-lg">
+              {error}
+            </div>
+          )}
+        </section>
+
+        <aside className="border-l border-border bg-surface-secondary/40 p-4">
+          <RoutePanel title="2. Choose movement">
+            <fieldset className="grid grid-cols-2 gap-2" aria-label="Movement mode">
+              {modes.map(({ id, label, icon: Icon }) => (
+                <Button
+                  aria-label={`${label} mode${mode === id ? ", selected" : ""}`}
+                  key={id}
+                  onPress={() => setMode(id)}
+                  variant={mode === id ? "primary" : "secondary"}
+                >
+                  <Icon size={16} /> {label}
+                </Button>
+              ))}
+            </fieldset>
+
+            <div className="mt-5">
+              {mode === "teleport" && <CoordinateEditor point={point} setPoint={setPoint} />}
+              {mode === "route" && (
+                <RouteEditor
+                  options={{ repetitions, roundTrip, speedKph, speedProfile }}
+                  pointCount={routePoints.length}
+                  setRepetitions={setRepetitions}
+                  setRoundTrip={setRoundTrip}
+                  setSpeedKph={setSpeedKph}
+                  setSpeedProfile={setSpeedProfile}
+                />
+              )}
+              {mode === "joystick" && (
+                <JoystickEditor
+                  onDirection={pressJoystick}
+                  onRelease={releaseJoystick}
+                  point={point}
+                  setPoint={setPoint}
+                  setSpeedKph={setSpeedKph}
+                  speedKph={speedKph}
+                />
+              )}
+              {mode === "gpx" && (
+                <GpxEditor
+                  name={gpxName}
+                  onExport={downloadGpx}
+                  onFile={importGpx}
+                  pointCount={routePoints.length}
+                  setSpeedKph={setSpeedKph}
+                  speedKph={speedKph}
+                />
+              )}
+            </div>
+
+            {metrics && (mode === "route" || mode === "gpx") && (
+              <div className="mt-4 rounded-xl bg-surface-tertiary p-3 text-sm">
+                <p className="font-medium">
+                  {formatDistance(metrics.distanceMeters)} · {formatDuration(metrics.travelTimeMs)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Informational cooldown: allow roughly the simulated travel time before abrupt
+                  long-distance changes.
+                </p>
+                {routeTooLong && (
+                  <p className="mt-2 text-xs font-medium text-danger">
+                    This route exceeds 100,000 updates. Increase speed, shorten it, or reduce
+                    repetitions before starting.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {!running && !paused && mode !== "joystick" && (
+                <Button
+                  isDisabled={!currentPlan || !selected || busy || routeTooLong}
+                  onPress={startCurrent}
+                >
+                  <Play size={16} /> {mode === "teleport" ? "Set location" : "Start"}
+                </Button>
+              )}
+              {running && activeMode !== "teleport" && (
+                <Button onPress={() => void control("pause")} variant="secondary">
+                  <Pause size={16} /> Pause
+                </Button>
+              )}
+              {paused && (
+                <Button onPress={() => void control("resume")}>
+                  <Play size={16} /> Resume
+                </Button>
+              )}
+              {(running || paused) && canRestart && (
+                <Button onPress={() => void control("restart")} variant="secondary">
+                  <RefreshCw size={16} /> Restart
+                </Button>
+              )}
+              {(running || paused) && activeMode !== "teleport" && (
+                <Button onPress={() => void control("stop")} variant="secondary">
+                  <Square size={14} /> Stop
+                </Button>
+              )}
+              <Button isDisabled={!selected} onPress={restore} variant="danger">
+                <RotateCcw size={16} /> Restore
+              </Button>
+            </div>
+          </RoutePanel>
+
+          <Surface className="mt-4 p-4">
+            <h2 className="font-semibold">Save locally</h2>
+            <div className="mt-3 flex gap-2">
+              <input
+                aria-label="Favorite name"
+                className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+                maxLength={80}
+                onChange={(event) => setFavoriteName(event.target.value)}
+                placeholder="Home, commute…"
+                value={favoriteName}
+              />
+              <Button isIconOnly isDisabled={!currentPlan} onPress={saveFavorite}>
+                <Star aria-label="Save favorite" size={17} />
+              </Button>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Favorites, routes, GPX, and history are encrypted before SQLite storage. No login or
+              subscription is checked in this build.
+            </p>
+          </Surface>
+
+          <Surface className="mt-4 p-4 text-sm">
+            <p className="flex items-center gap-2 font-semibold">
+              <ShieldCheck size={16} /> Local-only access
+            </p>
+            <p className="mt-2 text-muted-foreground">
+              Account and subscription enforcement is intentionally bypassed while the desktop
+              workflow is completed.
+            </p>
+          </Surface>
+        </aside>
+      </div>
+
+      <ConfirmExitDialog
+        onCancel={() => setExitOpen(false)}
+        onKeep={() => void runAction(() => desktopApi.resolveExit("keep"))}
+        onRestore={() => void runAction(() => desktopApi.resolveExit("restore"))}
+        open={exitOpen}
+      />
+      <ConfirmExitDialog
+        cancelLabel="Not now"
+        description="Enigma detected an unfinished local session. Select the previously used iPhone and restore it before beginning another simulation. This recovery does not require login or network account access."
+        keepLabel="Keep current point"
+        onCancel={() => setRecoveryOpen(false)}
+        onKeep={() => void recover("keep")}
+        onRestore={() => void recover("restore")}
+        open={recoveryOpen}
+        restoreDisabled={!selected}
+        restoreLabel="Restore now"
+        title="Recover previous session"
+      />
+    </AppShell>
+  );
+}
+
+function CoordinateEditor({
+  point,
+  setPoint,
+}: {
+  point?: Coordinate;
+  setPoint: (point: Coordinate) => void;
+}) {
+  const formatPoint = (next?: Coordinate) =>
+    next ? `${next.latitude.toFixed(6)}, ${next.longitude.toFixed(6)}` : "";
+  const [coordinateText, setCoordinateText] = useState(() => formatPoint(point));
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) setCoordinateText(formatPoint(point));
+  }, [point]);
+
+  return (
+    <FormField label="Latitude, longitude" hint="Click the map or paste decimal coordinates.">
+      <input
+        className="rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+        onChange={(event) => {
+          const value = event.currentTarget.value;
+          setCoordinateText(value);
+          const next = parseCoordinateText(value);
+          if (next) setPoint(next);
+        }}
+        onBlur={() => {
+          editingRef.current = false;
+          setCoordinateText(formatPoint(point));
+        }}
+        onFocus={() => {
+          editingRef.current = true;
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+        placeholder="49.282700, -123.120700"
+        value={coordinateText}
+      />
+    </FormField>
+  );
+}
+
+function RouteEditor({
+  pointCount,
+  options,
+  setSpeedKph,
+  setSpeedProfile,
+  setRepetitions,
+  setRoundTrip,
+}: {
+  pointCount: number;
+  options: {
+    speedKph: number;
+    speedProfile: "constant" | "natural";
+    repetitions: number;
+    roundTrip: boolean;
+  };
+  setSpeedKph: (value: number) => void;
+  setSpeedProfile: (value: "constant" | "natural") => void;
+  setRepetitions: (value: number) => void;
+  setRoundTrip: (value: boolean) => void;
+}) {
+  return (
+    <div className="grid gap-4">
+      <p className="rounded-xl bg-accent/10 p-3 text-sm text-accent">
+        Click the map to add route points. {pointCount} selected.
+      </p>
+      <MovementOptions
+        repetitions={options.repetitions}
+        roundTrip={options.roundTrip}
+        setRepetitions={setRepetitions}
+        setRoundTrip={setRoundTrip}
+        setSpeedKph={setSpeedKph}
+        setSpeedProfile={setSpeedProfile}
+        speedKph={options.speedKph}
+        speedProfile={options.speedProfile}
+      />
+    </div>
+  );
+}
+
+function MovementOptions({
+  speedKph,
+  speedProfile,
+  repetitions,
+  roundTrip,
+  setSpeedKph,
+  setSpeedProfile,
+  setRepetitions,
+  setRoundTrip,
+}: {
+  speedKph: number;
+  speedProfile: "constant" | "natural";
+  repetitions: number;
+  roundTrip: boolean;
+  setSpeedKph: (value: number) => void;
+  setSpeedProfile: (value: "constant" | "natural") => void;
+  setRepetitions: (value: number) => void;
+  setRoundTrip: (value: boolean) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <FormField label="Speed (km/h)">
+        <input
+          className="rounded-lg border border-border bg-surface px-3 py-2"
+          max={108}
+          min={0.4}
+          onChange={(event) => setSpeedKph(Number(event.target.value))}
+          step={0.1}
+          type="number"
+          value={speedKph}
+        />
+      </FormField>
+      <FormField label="Speed profile">
+        <select
+          className="rounded-lg border border-border bg-surface px-3 py-2"
+          onChange={(event) => setSpeedProfile(event.target.value as "constant" | "natural")}
+          value={speedProfile}
+        >
+          <option value="constant">Constant</option>
+          <option value="natural">Natural</option>
+        </select>
+      </FormField>
+      <FormField label="Repetitions">
+        <input
+          className="rounded-lg border border-border bg-surface px-3 py-2"
+          min={1}
+          onChange={(event) => setRepetitions(Math.max(1, Number(event.target.value)))}
+          type="number"
+          value={repetitions}
+        />
+      </FormField>
+      <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
+        <input
+          checked={roundTrip}
+          onChange={(event) => setRoundTrip(event.target.checked)}
+          type="checkbox"
+        />
+        Round trip
+      </label>
+    </div>
+  );
+}
+
+function JoystickEditor({
+  point,
+  speedKph,
+  setPoint,
+  setSpeedKph,
+  onDirection,
+  onRelease,
+}: {
+  point?: Coordinate;
+  speedKph: number;
+  setPoint: (point: Coordinate) => void;
+  setSpeedKph: (value: number) => void;
+  onDirection: (heading: number) => Promise<boolean>;
+  onRelease: () => Promise<void>;
+}) {
+  return (
+    <div className="grid gap-4">
+      <CoordinateEditor point={point} setPoint={setPoint} />
+      <FormField label="Speed (km/h)" hint="Hold WASD or arrow keys; release to pause.">
+        <input
+          className="rounded-lg border border-border bg-surface px-3 py-2"
+          max={108}
+          min={0.4}
+          onChange={(event) => setSpeedKph(Number(event.target.value))}
+          step={0.1}
+          type="number"
+          value={speedKph}
+        />
+      </FormField>
+      <div className="mx-auto grid w-36 grid-cols-3 gap-2">
+        <span />
+        <DirectionButton
+          heading={0}
+          icon={ChevronUp}
+          label="Move north"
+          onDirection={onDirection}
+          onRelease={onRelease}
+        />
+        <span />
+        <DirectionButton
+          heading={270}
+          icon={ChevronLeft}
+          label="Move west"
+          onDirection={onDirection}
+          onRelease={onRelease}
+        />
+        <span className="grid place-items-center text-xs text-muted-foreground">WASD</span>
+        <DirectionButton
+          heading={90}
+          icon={ChevronRight}
+          label="Move east"
+          onDirection={onDirection}
+          onRelease={onRelease}
+        />
+        <span />
+        <DirectionButton
+          heading={180}
+          icon={ChevronDown}
+          label="Move south"
+          onDirection={onDirection}
+          onRelease={onRelease}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DirectionButton({
+  heading,
+  icon: Icon,
+  label,
+  onDirection,
+  onRelease,
+}: {
+  heading: number;
+  icon: typeof ChevronUp;
+  label: string;
+  onDirection: (heading: number) => Promise<boolean>;
+  onRelease: () => Promise<void>;
+}) {
+  return (
+    <button
+      aria-label={label}
+      className="grid size-11 place-items-center rounded-xl border border-border bg-surface hover:border-accent active:bg-accent/15"
+      onPointerCancel={() => void onRelease()}
+      onPointerDown={() => void onDirection(heading)}
+      onPointerUp={() => void onRelease()}
+      type="button"
+    >
+      <Icon size={20} />
+    </button>
+  );
+}
+
+function GpxEditor({
+  pointCount,
+  name,
+  speedKph,
+  setSpeedKph,
+  onFile,
+  onExport,
+}: {
+  pointCount: number;
+  name?: string;
+  speedKph: number;
+  setSpeedKph: (value: number) => void;
+  onFile: (file?: File) => Promise<void>;
+  onExport: () => void;
+}) {
+  return (
+    <div className="grid gap-4">
+      <label className="grid cursor-pointer gap-2 rounded-xl border border-dashed border-border bg-surface p-4 text-center text-sm hover:border-accent">
+        <Upload className="mx-auto" size={22} />
+        <span>{name ? `${name} · ${pointCount} points` : "Import a GPX track"}</span>
+        <input
+          accept=".gpx,application/gpx+xml,application/xml,text/xml"
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = "";
+            void onFile(file);
+          }}
+          type="file"
+        />
+      </label>
+      <FormField label="Replay speed (km/h)">
+        <input
+          className="rounded-lg border border-border bg-surface px-3 py-2"
+          max={108}
+          min={0.4}
+          onChange={(event) => setSpeedKph(Number(event.target.value))}
+          step={0.1}
+          type="number"
+          value={speedKph}
+        />
+      </FormField>
+      <Button isDisabled={pointCount < 2} onPress={onExport} variant="secondary">
+        <Download size={16} /> Export current GPX
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Imports reject document types, entities, malformed coordinates, files over 10 MB, and tracks
+        over 100,000 points.
+      </p>
+    </div>
+  );
+}
+
+function LocalLibrary({
+  favorites,
+  history,
+  onLoad,
+  onDelete,
+}: {
+  favorites: LocalPlanRecord[];
+  history: LocalPlanRecord[];
+  onLoad: (record: LocalPlanRecord) => void;
+  onDelete: (record: LocalPlanRecord, kind: SavedPlanKind) => Promise<void>;
+}) {
+  return (
+    <Surface className="mt-4 p-4">
+      <h2 className="font-semibold">Local library</h2>
+      <LibraryGroup
+        empty="No favorites yet"
+        icon={Star}
+        kind="favorite"
+        onDelete={onDelete}
+        onLoad={onLoad}
+        records={favorites}
+        title="Favorites"
+      />
+      <LibraryGroup
+        empty="History appears after a simulation starts"
+        icon={RefreshCw}
+        kind="history"
+        onDelete={onDelete}
+        onLoad={onLoad}
+        records={history.slice(0, 8)}
+        title="Recent history"
+      />
+    </Surface>
+  );
+}
+
+function LibraryGroup({
+  title,
+  empty,
+  records,
+  kind,
+  icon: Icon,
+  onLoad,
+  onDelete,
+}: {
+  title: string;
+  empty: string;
+  records: LocalPlanRecord[];
+  kind: SavedPlanKind;
+  icon: typeof Star;
+  onLoad: (record: LocalPlanRecord) => void;
+  onDelete: (record: LocalPlanRecord, kind: SavedPlanKind) => Promise<void>;
+}) {
+  return (
+    <div className="mt-4">
+      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <Icon size={13} /> {title}
+      </p>
+      {records.length === 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">{empty}</p>
+      ) : (
+        <div className="mt-2 grid gap-1">
+          {records.map((record) => (
+            <div className="flex items-center gap-1" key={record.id}>
+              <button
+                className="min-w-0 flex-1 truncate rounded-lg px-2 py-2 text-left text-sm hover:bg-surface-tertiary"
+                onClick={() => onLoad(record)}
+                type="button"
+              >
+                {record.name}
+              </button>
+              <button
+                aria-label={`Delete ${record.name}`}
+                className="grid size-8 place-items-center rounded-lg text-muted-foreground hover:bg-danger/10 hover:text-danger"
+                onClick={() => void onDelete(record, kind)}
+                type="button"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function safeFileName(value: string): string {
+  return (
+    value
+      .trim()
+      .replace(/[^a-z0-9._-]+/giu, "-")
+      .replace(/^-+|-+$/gu, "") || "enigma-route"
+  );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
