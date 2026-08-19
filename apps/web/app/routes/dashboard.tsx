@@ -3,13 +3,15 @@ import { desc, eq } from "drizzle-orm";
 import { Download, Laptop, Settings } from "lucide-react";
 import type { LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData } from "react-router";
-import { SiteShell } from "../components/SiteShell";
+import { ButtonLink, SiteShell } from "../components/SiteShell";
 import { createDb } from "../server/db/db.server";
 import { desktopActivation, subscription as subscriptionTable } from "../server/db/schema";
 import { envFrom, getSession } from "../server/http.server";
+import { getPublicReleaseConfig, publicReleaseReady } from "../server/public-config.server";
 
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const env = envFrom(context);
+  const publicConfig = getPublicReleaseConfig(env);
   const session = await getSession(request, env);
   if (!session) throw redirect("/sign-in?callbackURL=/dashboard");
   const db = createDb(env);
@@ -39,7 +41,13 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
       .limit(1)
       .then(([current]) => current ?? null),
   ]);
-  return { user: session.user, activations, subscription };
+  return {
+    user: session.user,
+    activations,
+    subscription,
+    releaseReady: publicReleaseReady(publicConfig),
+    billingEnabled: publicConfig.billingEnabled,
+  };
 }
 
 export default function Dashboard() {
@@ -52,8 +60,8 @@ export default function Dashboard() {
             <p className="text-sm text-muted-foreground">Signed in as {data.user.email}</p>
             <h1 className="mt-1 text-4xl font-semibold">Your Enigma account</h1>
           </div>
-          <Button variant="secondary">
-            <Settings size={16} /> Manage billing
+          <Button isDisabled={!data.billingEnabled} variant="secondary">
+            <Settings size={16} /> {data.billingEnabled ? "Manage billing" : "Billing unavailable"}
           </Button>
         </div>
         <div className="mt-10 grid gap-5 lg:grid-cols-2">
@@ -68,14 +76,14 @@ export default function Dashboard() {
           </section>
           <section className="enigma-surface p-6">
             <h2 className="font-semibold">Downloads</h2>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button>
-                <Download size={16} /> macOS universal
-              </Button>
-              <Button variant="secondary">
-                <Download size={16} /> Windows x64
-              </Button>
-            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              {data.releaseReady
+                ? "Signed installers are available on the release page."
+                : "No signed public installers are available."}
+            </p>
+            <ButtonLink className="mt-4" to="/downloads" variant="secondary">
+              <Download size={16} /> Release status
+            </ButtonLink>
           </section>
         </div>
         <section className="enigma-surface mt-5 p-6">

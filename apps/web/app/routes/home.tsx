@@ -1,4 +1,4 @@
-import { ArrowRight, Cable, LockKeyhole, MapPinned, Wifi } from "lucide-react";
+import { ArrowRight, LockKeyhole, MapPinned, MonitorCheck, Wifi } from "lucide-react";
 import { ButtonLink, SiteShell } from "../components/SiteShell";
 
 const features = [
@@ -8,14 +8,14 @@ const features = [
     body: "Teleport, replay GPX, or simulate deterministic straight-line movement.",
   },
   {
-    icon: Cable,
-    title: "USB first",
-    body: "A stable direct connection with clear setup and restore diagnostics.",
+    icon: MonitorCheck,
+    title: "Fail-closed compatibility",
+    body: "The current build enables only the physically validated macOS and iOS 27 same-LAN path.",
   },
   {
     icon: Wifi,
     title: "Wi-Fi beta",
-    body: "Reconnect over the same LAN after the iPhone has been paired over USB.",
+    body: "Reconnect over the same LAN after initial USB pairing. USB operation itself remains unqualified.",
   },
   {
     icon: LockKeyhole,
@@ -37,15 +37,16 @@ export default function Home() {
               Test an iPhone location without sending it to the cloud.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-              A focused macOS and Windows utility for developers, QA teams, and controlled location
-              workflows.
+              A local-first desktop utility for developers, QA teams, and controlled location
+              workflows. The current preview targets macOS with a previously paired iOS 27 device on
+              the same LAN.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <ButtonLink size="lg" to="/pricing">
-                Start a 7-day trial <ArrowRight size={17} />
+              <ButtonLink size="lg" to="/downloads">
+                View release status <ArrowRight size={17} />
               </ButtonLink>
-              <ButtonLink size="lg" to="/dashboard" variant="secondary">
-                Download
+              <ButtonLink size="lg" to="/compatibility" variant="secondary">
+                Compatibility
               </ButtonLink>
             </div>
           </div>

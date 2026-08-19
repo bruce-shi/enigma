@@ -23,3 +23,6 @@ apps/desktop/src-tauri/gen/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Generated release evidence (templates stay tracked)
+release/generated/

@@ -36,3 +36,6 @@ Desktop operators should start with [`docs/desktop-setup.md`](./docs/desktop-set
 [`docs/compatibility.md`](./docs/compatibility.md), and
 [`docs/troubleshooting.md`](./docs/troubleshooting.md). Release signing and updater
 handoff live in [`docs/release-hardening.md`](./docs/release-hardening.md).
+The production gate and incident handoff are
+[`docs/launch-checklist.md`](./docs/launch-checklist.md) and
+[`docs/support-runbook.md`](./docs/support-runbook.md).

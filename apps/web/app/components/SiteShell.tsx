@@ -29,6 +29,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
       context="Location testing"
       navigation={
         <>
+          <ButtonLink to="/downloads" variant="ghost">
+            Downloads
+          </ButtonLink>
+          <ButtonLink to="/compatibility" variant="ghost">
+            Compatibility
+          </ButtonLink>
           <ButtonLink to="/pricing" variant="ghost">
             Pricing
           </ButtonLink>

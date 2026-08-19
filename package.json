@@ -15,7 +15,8 @@
     "test:run": "turbo run test:run",
     "desktop": "pnpm --filter @enigma/desktop",
     "web": "pnpm --filter @enigma/web",
-    "maps": "pnpm --filter @enigma/map-gateway"
+    "maps": "pnpm --filter @enigma/map-gateway",
+    "release:check": "pnpm --filter @enigma/desktop release:check && node scripts/validate-public-release.mjs release/public-v1.template.json --allow-placeholders"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.9",

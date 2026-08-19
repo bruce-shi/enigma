@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "gitCommit": "REPLACE_WITH_40_CHARACTER_GIT_COMMIT",
+  "publishedAt": "2026-08-19T00:00:00Z",
+  "channel": "stable",
+  "billingEnabled": false,
+  "restoreVerified": false,
+  "compatibility": [
+    {
+      "host": "macos",
+      "iosVersion": "17",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    },
+    {
+      "host": "macos",
+      "iosVersion": "18",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    },
+    {
+      "host": "macos",
+      "iosVersion": "26",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    },
+    {
+      "host": "macos",
+      "iosVersion": "27",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    },
+    {
+      "host": "macos",
+      "iosVersion": "27",
+      "iosBuild": "PENDING",
+      "transport": "network",
+      "result": "pending"
+    },
+    {
+      "host": "windows",
+      "iosVersion": "17",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    },
+    {
+      "host": "windows",
+      "iosVersion": "18",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    },
+    {
+      "host": "windows",
+      "iosVersion": "26",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    },
+    {
+      "host": "windows",
+      "iosVersion": "27",
+      "iosBuild": "PENDING",
+      "transport": "usb",
+      "result": "pending"
+    }
+  ],
+  "artifacts": {
+    "darwin-aarch64": {
+      "url": "https://releases.enigma.example/stable/REPLACE_ARTIFACT",
+      "sha256": "REPLACE_SHA256",
+      "updaterSignature": "REPLACE_SIGNATURE",
+      "codeSigned": false,
+      "notarized": false
+    },
+    "darwin-x86_64": {
+      "url": "https://releases.enigma.example/stable/REPLACE_ARTIFACT",
+      "sha256": "REPLACE_SHA256",
+      "updaterSignature": "REPLACE_SIGNATURE",
+      "codeSigned": false,
+      "notarized": false
+    },
+    "windows-x86_64": {
+      "url": "https://releases.enigma.example/stable/REPLACE_ARTIFACT",
+      "sha256": "REPLACE_SHA256",
+      "updaterSignature": "REPLACE_SIGNATURE",
+      "codeSigned": false
+    }
+  },
+  "services": {
+    "webOrigin": "https://enigma.example",
+    "mapOrigin": "https://maps.enigma.example",
+    "mapDataset": "REPLACE_DATASET_VERSION",
+    "webVerifiedAt": "PENDING",
+    "mapVerifiedAt": "PENDING",
+    "entitlementVerifiedAt": "PENDING",
+    "stripeWebhookVerifiedAt": "PENDING",
+    "emailDeliverabilityVerifiedAt": "PENDING"
+  },
+  "monitoringRunbook": "docs/support-runbook.md"
+}

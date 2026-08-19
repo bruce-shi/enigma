@@ -1,8 +1,8 @@
 # Enigma Milestones
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 Overall status: Implementation
-Current milestone: M6 — Release Hardening
+Current milestone: M7 — Public V1
 Next release: Desktop v1
 
 ## Status Rules
@@ -339,9 +339,16 @@ Evidence:
 
 ## M7 — Public V1
 
-Status: `not_started`
+Status: `in_progress`
 
-- [ ] Publish website, pricing, downloads, privacy, and terms
+Implementation: launch surfaces and fail-closed release tooling are complete;
+production publication, signed promotion, service verification, and physical evidence
+remain pending.
+
+- [x] Build website, pricing, downloads, compatibility, privacy, and terms surfaces
+- [ ] Publish and externally verify the production website
+- [x] Add fail-closed public release manifest and validation
+- [x] Add web/map/entitlement health probe and monitoring/support procedures
 - [ ] Promote signed builds to stable
 - [ ] Verify Stripe production webhooks and email deliverability
 - [ ] Verify map and entitlement production health
@@ -355,7 +362,31 @@ Exit criteria:
 
 Evidence:
 
-- Pending
+- Public configuration defaults to development status, version `0.0.0`, billing off,
+  no supported builds, and no artifact URLs. Download cards, pricing CTAs, account
+  email, and desktop update checks all remain disabled under that configuration.
+- Website copy no longer advertises USB, Windows, trials, or downloads as available.
+  Compatibility separates the successful macOS + iOS 27 same-LAN probe from pending
+  GUI acceptance and every unsupported/deferred path.
+- Public release configuration accepts only dedicated query-free HTTPS artifact URLs;
+  the stable gate additionally requires all macOS/Windows artifacts, exact iOS builds,
+  billing, and a non-zero release version.
+- The Public V1 manifest validator requires the exact Git commit, every locked physical
+  compatibility row, SHA-256 values, updater signatures, macOS signing/notarization,
+  Windows signing, production restore, billing, and dated web/map/entitlement/
+  Stripe/email evidence. The template passes structure validation only when placeholder
+  allowance is explicit and correctly fails the production gate.
+- `/api/health` reports the web process healthy while separately reporting
+  `publicReleaseReady: false`, billing false, version `0.0.0`, and zero artifacts. The
+  operator health script cross-checks a completed manifest against web and map health
+  and optionally performs an authenticated entitlement check.
+- Local browser QA covers home, downloads, pricing, compatibility, and sign-in. All
+  release/billing/account actions fail closed, and a clean post-optimization pass has no
+  console warnings/errors.
+- Monitoring, privacy-safe support intake, restore-first incident response, map/service
+  isolation, rollback, and the full launch sequence are documented in `docs/`.
+- No production deployment, purchase, email, entitlement, map, signed installer,
+  updater, or restore claim is made.
 
 ## Deferred After V1
 
@@ -415,3 +446,10 @@ Evidence:
 | 2026-08-19 | M6 | `corepack pnpm lint && pnpm check && pnpm test:run` | Pass | 60 JavaScript tests, including nine updater safety cases |
 | 2026-08-19 | M6 | `pnpm tauri build --debug --bundles app` | Pass | Unsigned debug Enigma.app bundled without updater signing credentials |
 | 2026-08-19 | M6 | Local desktop browser-preview QA | Pass | Stable update surface visible; Check disabled in unsigned build; no console warnings/errors |
+| 2026-08-19 | M7 | `corepack pnpm release:check` | Pass | Desktop release structure plus stable/beta and Public V1 template structure validated with explicit placeholder allowance |
+| 2026-08-19 | M7 | Public V1 validator without placeholder allowance | Expected fail | Rejected incomplete commit, physical matrix, hashes, signatures, notarization, billing, restore, and service evidence |
+| 2026-08-19 | M7 | `corepack pnpm lint && pnpm check && pnpm test:run && pnpm build` | Pass | 64 JavaScript tests; desktop/website builds and map Worker dry run |
+| 2026-08-19 | M7 | Local website browser QA | Pass | Development home and navigation; three disabled downloads; disabled pricing and sign-in; truthful compatibility; clean console after Vite optimization |
+| 2026-08-19 | M7 | `curl` GET/HEAD `/api/health` | Pass | No-store 200 response reports healthy development service and publicReleaseReady false |
+| 2026-08-19 | M0–M7 | Full clean local validation | Pass | Release structure, lint, six workspace type checks/builds, 64 JavaScript tests, map Worker dry run, Cargo format/check, eight Rust tests, and feature-gated M0 probe check |
+| 2026-08-19 | M7 | `pnpm tauri build --debug --bundles app` and bundle inspection | Pass | Final debug Enigma.app bundled; executable SHA-256 `0053bd417ea9191fc5378ec35130638d6e5e058666ad3b907549d73070a5022a`; location purpose present; signature unsigned/unverified as expected |

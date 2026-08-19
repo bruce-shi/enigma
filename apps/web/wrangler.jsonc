@@ -9,7 +9,16 @@
     "PUBLIC_ORIGIN": "http://localhost:5173",
     "EMAIL_FROM": "Enigma <signin@enigma.example>",
     "STRIPE_MONTHLY_PRICE_ID": "price_replace_monthly",
-    "STRIPE_YEARLY_PRICE_ID": "price_replace_yearly"
+    "STRIPE_YEARLY_PRICE_ID": "price_replace_yearly",
+    "PUBLIC_RELEASE_STATUS": "development",
+    "PUBLIC_RELEASE_VERSION": "0.0.0",
+    "PUBLIC_SUPPORTED_IOS_BUILDS": "",
+    "PUBLIC_BILLING_ENABLED": "false",
+    "PUBLIC_MONTHLY_PRICE_LABEL": "Not configured",
+    "PUBLIC_YEARLY_PRICE_LABEL": "Not configured",
+    "PUBLIC_MACOS_ARM64_DOWNLOAD_URL": "",
+    "PUBLIC_MACOS_X64_DOWNLOAD_URL": "",
+    "PUBLIC_WINDOWS_X64_DOWNLOAD_URL": ""
   },
   "d1_databases": [
     {
