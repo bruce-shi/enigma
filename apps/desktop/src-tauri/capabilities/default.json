@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimum desktop permissions required by Enigma",
+  "windows": ["main"],
+  "permissions": ["core:default", "deep-link:default", "opener:default", "updater:default"]
+}

@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "app",
+    "workers",
+    ".react-router/types/**/*",
+    "vite.config.ts",
+    "react-router.config.ts",
+    "worker-configuration.d.ts"
+  ],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "rootDirs": [".", "./.react-router/types"],
+    "types": ["@cloudflare/workers-types", "vite/client"]
+  }
+}

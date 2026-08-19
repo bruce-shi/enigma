@@ -1,0 +1,45 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/.turbo",
+      "!**/.react-router",
+      "!**/.wrangler",
+      "!**/build",
+      "!**/coverage",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/src-tauri/gen",
+      "!**/target"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "complexity": {
+        "noImportantStyles": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}

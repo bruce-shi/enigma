@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "enigma-web",
+  "main": "./workers/app.ts",
+  "compatibility_date": "2026-08-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "PUBLIC_ORIGIN": "http://localhost:5173",
+    "EMAIL_FROM": "Enigma <signin@enigma.example>",
+    "STRIPE_MONTHLY_PRICE_ID": "price_replace_monthly",
+    "STRIPE_YEARLY_PRICE_ID": "price_replace_yearly"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "enigma-accounts",
+      "database_id": "replace-with-d1-database-id",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CRASH_REPORTS",
+      "bucket_name": "enigma-crash-reports"
+    }
+  ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["signin@enigma.example"]
+    }
+  ]
+}

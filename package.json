@@ -1,0 +1,33 @@
+{
+  "name": "enigma",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "turbo run check",
+    "dev": "turbo run dev --parallel",
+    "lint": "biome check .",
+    "test": "turbo run test",
+    "test:run": "turbo run test:run",
+    "desktop": "pnpm --filter @enigma/desktop",
+    "web": "pnpm --filter @enigma/web",
+    "maps": "pnpm --filter @enigma/map-gateway"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.9",
+    "@types/node": "24.3.1",
+    "turbo": "2.10.11",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
+  }
+}

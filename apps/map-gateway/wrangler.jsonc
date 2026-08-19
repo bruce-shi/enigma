@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "enigma-map-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-18",
+  "observability": { "enabled": true },
+  "vars": {
+    "PMTILES_VERSION": "2026-08",
+    "ALLOWED_ORIGINS": "https://enigma.example,tauri://localhost,http://tauri.localhost"
+  },
+  "r2_buckets": [
+    {
+      "binding": "MAPS",
+      "bucket_name": "enigma-maps"
+    }
+  ]
+}

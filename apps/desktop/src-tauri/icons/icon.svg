@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Enigma location pin</title>
+  <rect width="1024" height="1024" rx="224" fill="#4169e1"/>
+  <path fill="#fff" d="M512 176c-146 0-264 118-264 264 0 199 264 408 264 408s264-209 264-408c0-146-118-264-264-264Zm0 360a104 104 0 1 1 0-208 104 104 0 0 1 0 208Z"/>
+</svg>

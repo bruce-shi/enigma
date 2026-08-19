@@ -1,0 +1,42 @@
+{
+  "name": "@enigma/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "dev": "vite",
+    "tauri": "tauri",
+    "test": "vitest",
+    "test:run": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@enigma/contracts": "workspace:*",
+    "@enigma/route-engine": "workspace:*",
+    "@enigma/ui": "workspace:*",
+    "@heroui/react": "catalog:",
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-deep-link": "2.4.5",
+    "@tauri-apps/plugin-opener": "2.5.3",
+    "@tauri-apps/plugin-updater": "2.9.0",
+    "lucide-react": "1.32.0",
+    "maplibre-gl": "6.4.1",
+    "pmtiles": "4.5.0",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@tauri-apps/cli": "2.11.4",
+    "@types/geojson": "7946.0.16",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "6.0.5",
+    "jsdom": "30.0.1",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

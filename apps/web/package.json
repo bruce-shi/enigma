@@ -1,0 +1,47 @@
+{
+  "name": "@enigma/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "check": "react-router typegen && tsc --noEmit",
+    "dev": "react-router dev",
+    "test": "vitest --config vitest.config.ts",
+    "test:run": "vitest run --config vitest.config.ts --passWithNoTests",
+    "deploy": "wrangler deploy",
+    "d1:migrate:local": "wrangler d1 migrations apply enigma-accounts --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply enigma-accounts --remote"
+  },
+  "dependencies": {
+    "@better-auth/stripe": "1.7.1",
+    "@enigma/contracts": "workspace:*",
+    "@enigma/ui": "workspace:*",
+    "@heroui/react": "catalog:",
+    "@heroui/styles": "catalog:",
+    "better-auth": "1.7.1",
+    "drizzle-orm": "0.45.2",
+    "jose": "6.2.9",
+    "lucide-react": "1.32.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "8.3.0",
+    "stripe": "22.5.0",
+    "zod": "4.4.3",
+    "isbot": "^5"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.53.0",
+    "@cloudflare/workers-types": "5.20260819.1",
+    "@react-router/dev": "8.3.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "6.0.5",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "4.124.0"
+  }
+}

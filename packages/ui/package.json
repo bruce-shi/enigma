@@ -1,0 +1,47 @@
+{
+  "name": "@enigma/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "./src/styles.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "development": "./src/index.tsx",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.check.json",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@enigma/contracts": "workspace:*",
+    "@heroui/react": "catalog:",
+    "lucide-react": "1.32.0"
+  },
+  "devDependencies": {
+    "@heroui/styles": "catalog:",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "axe-core": "4.13.0",
+    "jsdom": "30.0.1",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
