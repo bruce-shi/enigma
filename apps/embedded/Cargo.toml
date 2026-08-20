@@ -1,0 +1,10 @@
+[package]
+name = "enigma-embedded"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "enigma-embedded"
+path = "src/main.rs"

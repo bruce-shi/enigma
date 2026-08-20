@@ -1,0 +1,19 @@
+[build]
+target = "xtensa-esp32s3-espidf"
+target-dir = "target"
+
+[target.'cfg(target_os = "espidf")']
+linker = "ldproxy"
+# Keep espflash's bootloader, partition table, and application placement in
+# sync with this N16R8 board package. Without these flags espflash falls back
+# to its 4 MiB-style single-app table and places the ELF at 0x10000.
+runner = "espflash flash --monitor --flash-size 16mb --flash-mode dio --flash-freq 40mhz --partition-table partitions.csv --target-app-partition factory"
+rustflags = ["--cfg", "espidf_time64"]
+
+[unstable]
+build-std = ["std", "panic_abort"]
+
+[env]
+MCU = "esp32s3"
+ESP_IDF_VERSION = "v5.5.3"
+ESP_IDF_TOOLS_INSTALL_DIR = "workspace"

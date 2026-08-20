@@ -1,5 +1,10 @@
 [workspace]
-members = ["apps/desktop/src-tauri"]
+members = [
+  "apps/desktop/src-tauri",
+  "apps/embedded",
+  "apps/embedded/core",
+]
+exclude = ["apps/embedded/platforms/esp-idf"]
 resolver = "2"
 
 [workspace.package]

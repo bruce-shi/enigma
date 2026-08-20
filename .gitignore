@@ -13,6 +13,7 @@ coverage/
 
 # Rust / Tauri
 target/
+apps/embedded/platforms/esp-idf/.embuild/
 apps/desktop/src-tauri/gen/
 
 # Cloudflare

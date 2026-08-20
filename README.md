@@ -13,6 +13,10 @@ device compatibility unless the matching test appears in that file.
 - `apps/desktop` — Tauri 2 desktop application and Rust device engine.
 - `apps/web` — account, billing, downloads, and authorization website.
 - `apps/map-gateway` — range-aware PMTiles/style gateway for Cloudflare R2.
+- `apps/embedded` — portable embedded workflow plus platform/board
+  implementations; currently Rust/ESP-IDF on the Lichuang ESP32-S3 N16R8 with
+  a verified touch display and an experimental `idevice` transport. The stock
+  board's single upstream USB-C port cannot directly host an iPhone.
 - `packages/ui` — shared HeroUI v3 theme and components.
 - `packages/contracts` — API, device, route, and entitlement contracts.
 - `packages/route-engine` — deterministic WGS84 movement engine.
@@ -30,7 +34,7 @@ cargo test --workspace
 
 Cloud integrations require the bindings and secrets documented in each app's
 `.env.example` or `wrangler.jsonc`. Location data must remain local to the
-desktop application.
+device-facing desktop or embedded application.
 
 Desktop operators should start with [`docs/desktop-setup.md`](./docs/desktop-setup.md),
 [`docs/compatibility.md`](./docs/compatibility.md), and
