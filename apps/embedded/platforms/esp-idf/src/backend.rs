@@ -34,6 +34,14 @@ impl EspIdfBackend {
         self.location_store.catalog()
     }
 
+    pub fn has_pairing_record(&self) -> Result<bool, Box<dyn Error>> {
+        iphone::has_pairing_record(&self.pairing_storage)
+    }
+
+    pub fn import_pairing_record(&self, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
+        iphone::import_pairing_record(&self.pairing_storage, bytes)
+    }
+
     fn connect_if_needed(&mut self) -> Result<(), Box<dyn Error>> {
         if self.controller.is_none() {
             self.controller = Some(iphone::IphoneController::connect(&self.pairing_storage)?);

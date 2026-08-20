@@ -1,12 +1,14 @@
 //! ESP-IDF entry point shared by all supported board implementations.
 
 use std::error::Error;
+use std::time::Duration;
 
+use enigma_embedded_bridge_protocol::{ERROR_PREFIX, success_line};
 use enigma_embedded_core::{Action, Application, Location, Outcome};
 use esp_idf_svc::{hal::peripherals::Peripherals, nvs::EspDefaultNvsPartition};
 use log::info;
 
-use crate::{backend::EspIdfBackend, idevice_bridge, usb_host};
+use crate::{backend::EspIdfBackend, idevice_bridge};
 
 pub(crate) trait EspIdfBoard {
     type Hardware;
@@ -14,10 +16,15 @@ pub(crate) trait EspIdfBoard {
     const NAME: &'static str;
     const FLASH_MIB: usize;
     const PSRAM_MIB: usize;
-    const USB_MAX_CONTROL_TRANSFER_BYTES: usize;
 
     /// Takes the board-specific peripherals and samples any startup controls.
     fn take_hardware(peripherals: Peripherals) -> Result<(Self::Hardware, bool), Box<dyn Error>>;
+
+    /// Receives a one-time pairing record through the board provisioning link.
+    fn receive_pairing(
+        hardware: &Self::Hardware,
+        timeout: Duration,
+    ) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
 
     /// Runs the board's input/output loop and forwards user actions to the app.
     fn run_ui<F>(
@@ -45,17 +52,28 @@ pub fn run<B: EspIdfBoard>() -> Result<(), Box<dyn Error>> {
         idevice_bridge::IDEVICE_REVISION,
         idevice_bridge::linked_protocol()
     );
-    info!(
-        "USB transport target: Apple VID 0x{:04x}, max control transfer {} bytes",
-        usb_host::APPLE_VENDOR_ID,
-        B::USB_MAX_CONTROL_TRANSFER_BYTES
-    );
+    info!("transport target: board Wi-Fi with imported Apple pairing identity");
     if clear_pairing {
         info!("startup control active: stored iPhone pairing will be cleared");
     }
 
-    info!("initializing encrypted location and pairing storage");
+    info!("initializing location and pairing storage");
     let backend = EspIdfBackend::new(EspDefaultNvsPartition::take()?, clear_pairing)?;
+    let has_pairing = backend.has_pairing_record()?;
+    let provisioning_timeout = if has_pairing {
+        Duration::from_secs(3)
+    } else {
+        info!("no pairing record stored; opening desktop provisioning window");
+        Duration::from_secs(5)
+    };
+    match B::receive_pairing(&hardware, provisioning_timeout) {
+        Ok(Some(pairing_record)) => match backend.import_pairing_record(&pairing_record) {
+            Ok(()) => info!("{}", success_line(&pairing_record)),
+            Err(error) => log::error!("{ERROR_PREFIX} invalid pairing record: {error}"),
+        },
+        Ok(None) => {}
+        Err(error) => log::error!("{ERROR_PREFIX} {error}"),
+    }
     let catalog = backend.catalog()?;
     info!("storage ready; loaded {} location choices", catalog.len());
     let mut application = Application::new(backend);

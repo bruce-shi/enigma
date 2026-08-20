@@ -27,11 +27,12 @@ opt-level = "z"
 
 [dependencies]
 embedded-graphics = "0.7.1"
+enigma-embedded-bridge-protocol = { path = "../../bridge-protocol" }
 enigma-embedded-core = { path = "../../core" }
 esp-idf-svc = { version = "0.52.1", features = ["critical-section"] }
-idevice = { git = "https://github.com/jkcoxson/idevice.git", rev = "63a341d7f624b5c1f2540e4cecb269151a2caf52", default-features = false, features = ["location_simulation", "pair", "rustcrypto"] }
+idevice = { git = "https://github.com/jkcoxson/idevice.git", rev = "63a341d7f624b5c1f2540e4cecb269151a2caf52", default-features = false, features = ["core_device_proxy", "dvt", "location_simulation", "rsd", "rustcrypto", "tcp", "tunnel_tcp_stack"] }
 log = "0.4"
-tokio = { version = "1", default-features = false, features = ["io-util", "rt", "time"] }
+tokio = { version = "1", default-features = false, features = ["io-util", "net", "rt", "sync", "time"] }
 
 [build-dependencies]
 embuild = "0.33"

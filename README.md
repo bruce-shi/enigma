@@ -15,8 +15,9 @@ device compatibility unless the matching test appears in that file.
 - `apps/map-gateway` — range-aware PMTiles/style gateway for Cloudflare R2.
 - `apps/embedded` — portable embedded workflow plus platform/board
   implementations; currently Rust/ESP-IDF on the Lichuang ESP32-S3 N16R8 with
-  a verified touch display and an experimental `idevice` transport. The stock
-  board's single upstream USB-C port cannot directly host an iPhone.
+  a verified touch display, desktop pairing bridge, and board-owned Wi-Fi
+  `idevice` transport. The stock board's single upstream USB-C port is used for
+  flash/power/provisioning rather than directly hosting an iPhone.
 - `packages/ui` — shared HeroUI v3 theme and components.
 - `packages/contracts` — API, device, route, and entitlement contracts.
 - `packages/route-engine` — deterministic WGS84 movement engine.

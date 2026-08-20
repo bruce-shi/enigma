@@ -17,6 +17,7 @@ import {
 } from "@enigma/ui";
 import { Button } from "@heroui/react";
 import {
+  Cable,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -97,6 +98,7 @@ export function App() {
   const [exitOpen, setExitOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [provisioningMessage, setProvisioningMessage] = useState<string>();
   const [crashConsent, setCrashConsent] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<DesktopUpdateInfo>();
   const [updateMessage, setUpdateMessage] = useState<string>();
@@ -241,6 +243,15 @@ export function App() {
     if (!device) return;
     setSelected(device);
     if (startupRecoveryPending) setRecoveryOpen(true);
+  };
+
+  const provisionBoard = async (deviceId: string) => {
+    setProvisioningMessage(undefined);
+    const result = await run(() => desktopApi.provisionEmbedded(deviceId));
+    if (!result) return;
+    setProvisioningMessage(
+      `Board provisioned on ${result.boardPort} · pairing ${result.pairingFingerprint}`,
+    );
   };
 
   const locateComputer = async () => {
@@ -527,17 +538,25 @@ export function App() {
         <aside className="border-r border-border bg-surface-secondary/40 p-4">
           <RoutePanel title="1. Connect iPhone">
             <ol className="mb-4 grid gap-2 text-sm text-muted-foreground">
-              <li>1. Use an iPhone already paired once by USB with this Mac.</li>
-              <li>2. Enable Developer Mode, unlock it, and join the same LAN.</li>
-              <li>3. Scan and select the iOS 27 device below.</li>
+              <li>1. Connect both the Lichuang board and iPhone to this Mac.</li>
+              <li>2. Unlock the iPhone, approve Trust, then provision the USB device below.</li>
+              <li>
+                3. Join the Wi-Fi shown on the board, choose Use Without Internet, then use its
+                touch screen.
+              </li>
             </ol>
+            {provisioningMessage && (
+              <p className="mb-3 rounded-xl bg-success/15 p-3 text-xs font-medium text-success">
+                {provisioningMessage}
+              </p>
+            )}
             {devices.length === 0 ? (
               <EmptyState
-                title="No same-LAN iPhone found"
-                description="The validated path is macOS with a previously paired iOS 27 device on the same LAN. USB and Windows qualification remain deferred."
+                title="No iPhone found"
+                description="Connect and unlock the iPhone by USB for initial board provisioning. Afterward, the board connects directly over its own Wi-Fi."
                 action={
                   <Button onPress={refreshDevices}>
-                    <Wifi size={16} /> Scan same LAN
+                    <Wifi size={16} /> Scan devices
                   </Button>
                 }
               />
@@ -548,20 +567,39 @@ export function App() {
                     device.transport === "network" && device.osVersion?.startsWith("27.");
                   const selectable = validated && device.state === "ready";
                   return (
-                    <button
-                      className={`rounded-xl border bg-surface p-3 text-left transition-colors enabled:hover:border-accent disabled:cursor-not-allowed disabled:opacity-60 ${selected?.id === device.id ? "border-accent ring-2 ring-accent/20" : "border-border"}`}
-                      disabled={!selectable}
+                    <div
+                      className={`rounded-xl border bg-surface p-3 text-left ${selected?.id === device.id ? "border-accent ring-2 ring-accent/20" : "border-border"}`}
                       key={device.id}
-                      onClick={() => void connect(device.id)}
-                      type="button"
                     >
                       <DeviceStatus {...device} />
                       <p className={`mt-2 text-xs ${validated ? "text-success" : "text-warning"}`}>
                         {validated
                           ? `Validated same-LAN path · iOS ${device.osVersion}`
-                          : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · not qualified in this pass`}
+                          : device.transport === "usb"
+                            ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · initial provisioning source`
+                            : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · not qualified in this pass`}
                       </p>
-                    </button>
+                      {selectable ? (
+                        <Button
+                          className="mt-3 w-full"
+                          isDisabled={busy}
+                          onPress={() => void connect(device.id)}
+                          size="sm"
+                        >
+                          <Wifi size={15} /> Connect over Wi-Fi
+                        </Button>
+                      ) : device.transport === "usb" && device.state === "ready" ? (
+                        <Button
+                          className="mt-3 w-full"
+                          isDisabled={busy}
+                          onPress={() => void provisionBoard(device.id)}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          <Cable size={15} /> Provision board
+                        </Button>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>

@@ -104,7 +104,7 @@ fn ensure_sample_capacity(length: usize) -> Result<(), String> {
 
 fn deterministic_variation(seed: u64, index: u64) -> f64 {
     let angle = seed as f64 * 12.9898 + index as f64 * 78.233;
-    let raw = angle.sin() * 43_758.5453;
+    let raw = angle.sin() * 43_758.545_3;
     let value = raw - raw.floor();
     0.95 + value * 0.1
 }

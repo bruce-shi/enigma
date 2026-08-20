@@ -6,21 +6,25 @@
 mod lcd;
 mod ui;
 
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 use enigma_embedded_core::{Action, Location, Outcome};
 use esp_idf_svc::hal::{
-    gpio::{Gpio1, Gpio2, Gpio39, Gpio40, Gpio41, Gpio42, PinDriver, Pull},
+    gpio::{AnyIOPin, Gpio1, Gpio2, Gpio39, Gpio40, Gpio41, Gpio42, Input, PinDriver, Pull},
     i2c::I2C1,
+    modem::Modem,
     peripherals::Peripherals,
     spi::SPI3,
+    uart::{UartDriver, config::Config as UartConfig},
 };
 
-use crate::board::EspIdfBoard;
+use crate::{board::EspIdfBoard, serial_provision};
 
 pub struct LichuangEsp32S3;
 
 pub(crate) struct Hardware {
+    uart: UartDriver<'static>,
+    modem: Modem<'static>,
     spi: SPI3<'static>,
     i2c: I2C1<'static>,
     sclk: Gpio41<'static>,
@@ -29,6 +33,7 @@ pub(crate) struct Hardware {
     backlight: Gpio42<'static>,
     sda: Gpio1<'static>,
     scl: Gpio2<'static>,
+    boot_button: PinDriver<'static, Input>,
 }
 
 impl EspIdfBoard for LichuangEsp32S3 {
@@ -37,16 +42,24 @@ impl EspIdfBoard for LichuangEsp32S3 {
     const NAME: &'static str = "Lichuang ESP32-S3 N16R8";
     const FLASH_MIB: usize = 16;
     const PSRAM_MIB: usize = 8;
-    const USB_MAX_CONTROL_TRANSFER_BYTES: usize = 1536;
 
     fn take_hardware(peripherals: Peripherals) -> Result<(Self::Hardware, bool), Box<dyn Error>> {
         let pins = peripherals.pins;
         let boot_button = PinDriver::input(pins.gpio0, Pull::Up)?;
         let clear_pairing = boot_button.is_low();
-        drop(boot_button);
+        let uart = UartDriver::new(
+            peripherals.uart0,
+            pins.gpio43,
+            pins.gpio44,
+            Option::<AnyIOPin>::None,
+            Option::<AnyIOPin>::None,
+            &UartConfig::default(),
+        )?;
 
         Ok((
             Hardware {
+                uart,
+                modem: peripherals.modem,
                 spi: peripherals.spi3,
                 i2c: peripherals.i2c1,
                 sclk: pins.gpio41,
@@ -55,9 +68,18 @@ impl EspIdfBoard for LichuangEsp32S3 {
                 backlight: pins.gpio42,
                 sda: pins.gpio1,
                 scl: pins.gpio2,
+                boot_button,
             },
             clear_pairing,
         ))
+    }
+
+    fn receive_pairing(
+        hardware: &Self::Hardware,
+        timeout: Duration,
+    ) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+        serial_provision::receive_pairing_record(&hardware.uart, timeout)
+            .map_err(|error| error.into())
     }
 
     fn run_ui<F>(

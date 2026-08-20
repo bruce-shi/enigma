@@ -1,24 +1,108 @@
 mod device;
 mod model;
 pub mod probe;
+mod provisioning;
 mod route;
 mod simulation;
 mod storage;
 
-use std::sync::Arc;
+use std::{
+    path::PathBuf,
+    sync::{Arc, OnceLock},
+};
 
 use device::{DeviceAdapter, DeviceRuntime};
 use model::{
     Coordinate, DeviceSummary, DeviceTransport, LocalPlanRecord, SimulationPlan, SimulationSnapshot,
 };
 use simulation::SimulationController;
-use storage::LocalVault;
+use storage::{EncryptedRecord, LocalVault};
 use tauri::{Emitter, Manager, WindowEvent};
+
+struct DeferredVault {
+    path: PathBuf,
+    value: OnceLock<Result<LocalVault, String>>,
+}
+
+impl DeferredVault {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            value: OnceLock::new(),
+        }
+    }
+
+    fn open(&self) -> Result<&LocalVault, String> {
+        match self.value.get_or_init(|| LocalVault::open(&self.path)) {
+            Ok(vault) => Ok(vault),
+            Err(error) => Err(error.clone()),
+        }
+    }
+
+    fn warm_up(&self) {
+        if let Err(error) = self.open() {
+            tracing::warn!(%error, "local vault initialization failed");
+        }
+    }
+
+    fn put_encrypted(
+        &self,
+        id: &str,
+        kind: &str,
+        display_metadata: &str,
+        plaintext: &[u8],
+    ) -> Result<(), String> {
+        self.open()?
+            .put_encrypted(id, kind, display_metadata, plaintext)
+    }
+
+    fn latest_encrypted(&self, kind: &str) -> Result<Option<Vec<u8>>, String> {
+        self.open()?.latest_encrypted(kind)
+    }
+
+    fn list_encrypted(&self, kind: &str, limit: usize) -> Result<Vec<EncryptedRecord>, String> {
+        self.open()?.list_encrypted(kind, limit)
+    }
+
+    fn delete_encrypted(&self, id: &str, kind: &str) -> Result<(), String> {
+        self.open()?.delete_encrypted(id, kind)
+    }
+
+    fn set_dirty_session(&self, dirty: bool) -> Result<(), String> {
+        self.open()?.set_dirty_session(dirty)
+    }
+
+    fn has_dirty_session(&self) -> Result<bool, String> {
+        self.open()?.has_dirty_session()
+    }
+
+    fn should_guard_exit(&self) -> bool {
+        self.open().map_or(true, LocalVault::should_guard_exit)
+    }
+
+    fn set_crash_reporting_consent(&self, consent: bool) -> Result<(), String> {
+        self.open()?.set_crash_reporting_consent(consent)
+    }
+
+    fn has_crash_reporting_consent(&self) -> Result<bool, String> {
+        self.open()?.has_crash_reporting_consent()
+    }
+}
 
 pub struct AppState {
     device: Arc<DeviceRuntime>,
     simulation: Arc<SimulationController>,
-    vault: Arc<LocalVault>,
+    vault: Arc<DeferredVault>,
+}
+
+async fn run_vault_task<T, F>(vault: Arc<DeferredVault>, task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&DeferredVault) -> Result<T, String> + Send + 'static,
+{
+    tokio::task::spawn_blocking(move || task(&vault))
+        .await
+        .map_err(|error| format!("local vault task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -37,6 +121,17 @@ async fn connect_device(
 #[tauri::command]
 async fn disconnect_device(state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.device.disconnect_device().await
+}
+
+#[tauri::command]
+async fn provision_embedded(
+    state: tauri::State<'_, AppState>,
+    device_id: String,
+) -> Result<provisioning::ProvisioningResult, String> {
+    let pairing_record = state.device.pairing_record_for(&device_id).await?;
+    tokio::task::spawn_blocking(move || provisioning::provision_pairing_record(&pairing_record))
+        .await
+        .map_err(|error| format!("board provisioning task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -70,7 +165,7 @@ async fn start_and_record(state: &AppState, plan: SimulationPlan) -> Result<(), 
     Ok(())
 }
 
-fn record_history(vault: &LocalVault, plan: &SimulationPlan) -> Result<(), String> {
+fn record_history(vault: &DeferredVault, plan: &SimulationPlan) -> Result<(), String> {
     let id = uuid::Uuid::new_v4().to_string();
     let plaintext = serde_json::to_vec(plan).map_err(|error| error.to_string())?;
     vault.put_encrypted(&id, "history", r#"{"recordType":"simulation"}"#, &plaintext)
@@ -93,50 +188,58 @@ fn plan_name(plan: &SimulationPlan) -> &'static str {
 }
 
 #[tauri::command]
-fn latest_history(state: tauri::State<'_, AppState>) -> Result<Option<SimulationPlan>, String> {
-    state
-        .vault
-        .latest_encrypted("history")?
-        .map(|plaintext| serde_json::from_slice(&plaintext).map_err(|error| error.to_string()))
-        .transpose()
+async fn latest_history(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<SimulationPlan>, String> {
+    run_vault_task(state.vault.clone(), |vault| {
+        vault
+            .latest_encrypted("history")?
+            .map(|plaintext| serde_json::from_slice(&plaintext).map_err(|error| error.to_string()))
+            .transpose()
+    })
+    .await
 }
 
 #[tauri::command]
-fn list_history(state: tauri::State<'_, AppState>) -> Result<Vec<LocalPlanRecord>, String> {
-    state
-        .vault
-        .list_encrypted("history", 50)?
-        .into_iter()
-        .map(|record| {
-            let plan: SimulationPlan =
-                serde_json::from_slice(&record.plaintext).map_err(|error| error.to_string())?;
-            Ok(LocalPlanRecord {
-                id: record.id,
-                name: plan_name(&plan).into(),
-                created_at: record.created_at,
-                plan,
+async fn list_history(state: tauri::State<'_, AppState>) -> Result<Vec<LocalPlanRecord>, String> {
+    run_vault_task(state.vault.clone(), |vault| {
+        vault
+            .list_encrypted("history", 50)?
+            .into_iter()
+            .map(|record| {
+                let plan: SimulationPlan =
+                    serde_json::from_slice(&record.plaintext).map_err(|error| error.to_string())?;
+                Ok(LocalPlanRecord {
+                    id: record.id,
+                    name: plan_name(&plan).into(),
+                    created_at: record.created_at,
+                    plan,
+                })
             })
-        })
-        .collect()
+            .collect()
+    })
+    .await
 }
 
 #[tauri::command]
-fn list_favorites(state: tauri::State<'_, AppState>) -> Result<Vec<LocalPlanRecord>, String> {
-    state
-        .vault
-        .list_encrypted("favorite", 100)?
-        .into_iter()
-        .map(|record| {
-            let favorite: FavoritePayload =
-                serde_json::from_slice(&record.plaintext).map_err(|error| error.to_string())?;
-            Ok(LocalPlanRecord {
-                id: record.id,
-                name: favorite.name,
-                created_at: record.created_at,
-                plan: favorite.plan,
+async fn list_favorites(state: tauri::State<'_, AppState>) -> Result<Vec<LocalPlanRecord>, String> {
+    run_vault_task(state.vault.clone(), |vault| {
+        vault
+            .list_encrypted("favorite", 100)?
+            .into_iter()
+            .map(|record| {
+                let favorite: FavoritePayload =
+                    serde_json::from_slice(&record.plaintext).map_err(|error| error.to_string())?;
+                Ok(LocalPlanRecord {
+                    id: record.id,
+                    name: favorite.name,
+                    created_at: record.created_at,
+                    plan: favorite.plan,
+                })
             })
-        })
-        .collect()
+            .collect()
+    })
+    .await
 }
 
 #[tauri::command]
@@ -222,12 +325,16 @@ async fn get_host_location() -> Result<Coordinate, String> {
 
 #[tauri::command]
 async fn has_dirty_session(state: tauri::State<'_, AppState>) -> Result<bool, String> {
-    state.vault.has_dirty_session()
+    run_vault_task(state.vault.clone(), DeferredVault::has_dirty_session).await
 }
 
 #[tauri::command]
-fn get_crash_reporting_consent(state: tauri::State<'_, AppState>) -> Result<bool, String> {
-    state.vault.has_crash_reporting_consent()
+async fn get_crash_reporting_consent(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+    run_vault_task(
+        state.vault.clone(),
+        DeferredVault::has_crash_reporting_consent,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -365,6 +472,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
                 let _ = window.set_focus();
             }
         }))
@@ -374,16 +482,18 @@ pub fn run() {
         .setup(move |app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
-            let vault = Arc::new(
-                LocalVault::open(&data_dir.join("enigma.sqlite")).map_err(std::io::Error::other)?,
-            );
+            let vault = Arc::new(DeferredVault::new(data_dir.join("enigma.sqlite")));
             app.manage(AppState {
                 device: device.clone(),
                 simulation: simulation.clone(),
                 vault: vault.clone(),
             });
+            let vault_warmup = vault.clone();
+            tauri::async_runtime::spawn_blocking(move || vault_warmup.warm_up());
             let handle = app.handle().clone();
             if let Some(window) = app.get_webview_window("main") {
+                window.show()?;
+                window.set_focus()?;
                 let vault = vault.clone();
                 window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event
@@ -400,6 +510,7 @@ pub fn run() {
             list_devices,
             connect_device,
             disconnect_device,
+            provision_embedded,
             get_host_location,
             set_location,
             start_simulation,

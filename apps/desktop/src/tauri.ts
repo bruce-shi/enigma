@@ -14,6 +14,12 @@ export interface LocalPlanRecord {
 
 export type SavedPlanKind = "favorite" | "history";
 
+export interface ProvisioningResult {
+  boardPort: string;
+  pairingFingerprint: string;
+  pairingBytes: number;
+}
+
 const inTauri = () => "__TAURI_INTERNALS__" in globalThis;
 let mockSnapshot: SimulationSnapshot = { state: "idle", progress: 0, elapsedMs: 0 };
 const mockHistory: LocalPlanRecord[] = [];
@@ -66,6 +72,12 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
         osVersion: "27.0",
         transport: "network",
         state: "ready",
+      } as T;
+    case "provision_embedded":
+      return {
+        boardPort: "/dev/cu.wchusbserial-preview",
+        pairingFingerprint: "0123456789ab",
+        pairingBytes: 8192,
       } as T;
     case "get_simulation_snapshot":
       return mockSnapshot as T;
@@ -181,6 +193,8 @@ export const desktopApi = {
   listDevices: () => invoke<DeviceSummary[]>("list_devices"),
   connectDevice: (deviceId: string) => invoke<DeviceSummary>("connect_device", { deviceId }),
   disconnectDevice: () => invoke<void>("disconnect_device"),
+  provisionEmbedded: (deviceId: string) =>
+    invoke<ProvisioningResult>("provision_embedded", { deviceId }),
   getHostLocation: async () => {
     try {
       return await invoke<Coordinate>("get_host_location");

@@ -1,4 +1,12 @@
-use std::{path::Path, sync::Mutex};
+use std::{
+    fs::{self, OpenOptions},
+    io::{ErrorKind, Write},
+    path::Path,
+    sync::Mutex,
+};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use chacha20poly1305::{
@@ -7,8 +15,7 @@ use chacha20poly1305::{
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
-const KEYRING_SERVICE: &str = "app.enigma.desktop";
-const KEYRING_USER: &str = "local-location-vault";
+const VAULT_KEY_FILE: &str = "local-vault.key";
 
 pub struct EncryptedRecord {
     pub id: String,
@@ -23,7 +30,7 @@ pub struct LocalVault {
 
 impl LocalVault {
     pub fn open(path: &Path) -> Result<Self, String> {
-        let key = load_or_create_key()?;
+        let key = load_or_create_key(path)?;
         let connection = Connection::open(path).map_err(|error| error.to_string())?;
         connection
             .execute_batch(
@@ -250,32 +257,79 @@ impl LocalVault {
     }
 }
 
-fn load_or_create_key() -> Result<[u8; 32], String> {
-    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
-        .map_err(|error| format!("credential store unavailable: {error}"))?;
-    let encoded = match entry.get_password() {
+fn load_or_create_key(database_path: &Path) -> Result<[u8; 32], String> {
+    let data_dir = database_path
+        .parent()
+        .ok_or_else(|| "local database path has no parent directory".to_string())?;
+    let key_path = data_dir.join(VAULT_KEY_FILE);
+    let encoded = match fs::read_to_string(&key_path) {
         Ok(value) => value,
-        Err(keyring::Error::NoEntry) => {
+        Err(error) if error.kind() == ErrorKind::NotFound => {
             let key: [u8; 32] = rand::random();
             let value = STANDARD_NO_PAD.encode(key);
-            entry
-                .set_password(&value)
-                .map_err(|error| format!("could not save the local encryption key: {error}"))?;
-            value
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            options.mode(0o600);
+            match options.open(&key_path) {
+                Ok(mut file) => {
+                    file.write_all(value.as_bytes())
+                        .and_then(|()| file.sync_all())
+                        .map_err(|error| {
+                            format!("could not save the local encryption key: {error}")
+                        })?;
+                    value
+                }
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+                    fs::read_to_string(&key_path).map_err(|error| {
+                        format!("could not read the local encryption key: {error}")
+                    })?
+                }
+                Err(error) => {
+                    return Err(format!(
+                        "could not create the local encryption key: {error}"
+                    ));
+                }
+            }
         }
         Err(error) => return Err(format!("could not read the local encryption key: {error}")),
     };
     let bytes = STANDARD_NO_PAD
-        .decode(encoded)
-        .map_err(|_| "credential store returned an invalid local encryption key".to_string())?;
+        .decode(encoded.trim())
+        .map_err(|_| "local encryption key file is invalid".to_string())?;
     bytes
         .try_into()
-        .map_err(|_| "credential store returned a local key with the wrong length".to_string())
+        .map_err(|_| "local encryption key has the wrong length".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn persists_a_private_file_key_without_authentication() {
+        let test_dir =
+            std::env::temp_dir().join(format!("enigma-local-vault-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&test_dir).unwrap();
+        let database_path = test_dir.join("enigma.sqlite");
+
+        let first = load_or_create_key(&database_path).unwrap();
+        let second = load_or_create_key(&database_path).unwrap();
+        assert_eq!(first, second);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = fs::metadata(test_dir.join(VAULT_KEY_FILE))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+
+        fs::remove_dir_all(test_dir).unwrap();
+    }
 
     #[test]
     fn encrypts_payloads_and_authenticates_record_identity() {

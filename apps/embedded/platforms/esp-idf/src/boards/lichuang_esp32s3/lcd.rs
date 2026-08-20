@@ -25,7 +25,12 @@ use super::display;
 
 const SPI_CLOCK_HZ: u32 = 80_000_000;
 const FRAME_PIXELS: usize = display::WIDTH as usize * display::HEIGHT as usize;
-const FRAME_BYTES: usize = FRAME_PIXELS * 2;
+// Wi-Fi and the LCD both need DMA-capable internal memory. Keep the complete
+// drawing surface in PSRAM-backed Vec storage, but transfer it through one
+// small reusable strip instead of reserving another full 153.6 KiB DMA frame.
+const TRANSFER_ROWS: usize = 20;
+const TRANSFER_PIXELS: usize = display::WIDTH as usize * TRANSFER_ROWS;
+const TRANSFER_BYTES: usize = TRANSFER_PIXELS * 2;
 
 static COLOR_TRANSFER_DONE: AtomicBool = AtomicBool::new(true);
 
@@ -64,21 +69,22 @@ impl LcdDisplay {
         bus_config.data5_io_num = -1;
         bus_config.data6_io_num = -1;
         bus_config.data7_io_num = -1;
-        bus_config.max_transfer_sz = FRAME_BYTES as i32;
+        bus_config.max_transfer_sz = TRANSFER_BYTES as i32;
         esp!(unsafe {
             sys::spi_bus_initialize(
                 sys::spi_host_device_t_SPI3_HOST,
                 &bus_config,
                 sys::spi_common_dma_t_SPI_DMA_CH_AUTO,
             )
-        })?;
+        })
+        .map_err(|error| io::Error::other(format!("LCD SPI bus init failed: {error}")))?;
 
         let mut io_config: sys::esp_lcd_panel_io_spi_config_t = unsafe { core::mem::zeroed() };
         io_config.cs_gpio_num = -1;
         io_config.dc_gpio_num = 39;
         io_config.spi_mode = 2;
         io_config.pclk_hz = SPI_CLOCK_HZ;
-        io_config.trans_queue_depth = 10;
+        io_config.trans_queue_depth = 1;
         io_config.on_color_trans_done = Some(color_transfer_done);
         io_config.lcd_cmd_bits = 8;
         io_config.lcd_param_bits = 8;
@@ -90,7 +96,8 @@ impl LcdDisplay {
                 &io_config,
                 &mut io_handle,
             )
-        })?;
+        })
+        .map_err(|error| io::Error::other(format!("LCD panel IO init failed: {error}")))?;
 
         let panel_config = sys::esp_lcd_panel_dev_config_t {
             reset_gpio_num: -1,
@@ -103,7 +110,8 @@ impl LcdDisplay {
         };
 
         let mut panel: sys::esp_lcd_panel_handle_t = core::ptr::null_mut();
-        esp!(unsafe { sys::esp_lcd_new_panel_st7789(io_handle, &panel_config, &mut panel) })?;
+        esp!(unsafe { sys::esp_lcd_new_panel_st7789(io_handle, &panel_config, &mut panel) })
+            .map_err(|error| io::Error::other(format!("ST7789 panel init failed: {error}")))?;
 
         // Match xiaozhi's working Lichuang sequence. The board's LCD reset is
         // shared with the global RESET net; PCA9557 IO0 is actually LCD_CS.
@@ -124,10 +132,10 @@ impl LcdDisplay {
         framebuffer.resize(FRAME_PIXELS, Rgb565::BLACK);
 
         let dma_buffer = NonNull::new(unsafe {
-            sys::spi_bus_dma_memory_alloc(sys::spi_host_device_t_SPI3_HOST, FRAME_BYTES, 0)
+            sys::spi_bus_dma_memory_alloc(sys::spi_host_device_t_SPI3_HOST, TRANSFER_BYTES, 0)
                 .cast::<u8>()
         })
-        .ok_or_else(|| io::Error::other("LCD DMA framebuffer allocation failed"))?;
+        .ok_or_else(|| io::Error::other("LCD DMA strip allocation failed"))?;
 
         Ok(Self {
             panel,
@@ -144,36 +152,40 @@ impl LcdDisplay {
 
     /// Flushes the full 320x240 framebuffer as RGB565 big-endian pixel data.
     pub(super) fn flush(&mut self) -> Result<(), Box<dyn Error>> {
-        self.wait_for_transfer();
-        let bytes =
-            unsafe { core::slice::from_raw_parts_mut(self.dma_buffer.as_ptr(), FRAME_BYTES) };
-        for (color, output) in self.framebuffer.iter().zip(bytes.chunks_exact_mut(2)) {
-            let raw = color.into_storage();
-            output[0] = (raw >> 8) as u8;
-            output[1] = raw as u8;
-        }
+        let mut pixel_start = 0;
+        while pixel_start < self.framebuffer.len() {
+            self.wait_for_transfer();
+            let pixel_end = (pixel_start + TRANSFER_PIXELS).min(self.framebuffer.len());
+            let pixels = &self.framebuffer[pixel_start..pixel_end];
+            let byte_count = pixels.len() * 2;
+            let bytes =
+                unsafe { core::slice::from_raw_parts_mut(self.dma_buffer.as_ptr(), byte_count) };
+            for (color, output) in pixels.iter().zip(bytes.chunks_exact_mut(2)) {
+                let raw = color.into_storage();
+                output[0] = (raw >> 8) as u8;
+                output[1] = raw as u8;
+            }
 
-        COLOR_TRANSFER_DONE.store(false, Ordering::Release);
-        let result = esp!(unsafe {
-            sys::esp_lcd_panel_draw_bitmap(
-                self.panel,
-                0,
-                0,
-                i32::from(display::WIDTH),
-                i32::from(display::HEIGHT),
-                self.dma_buffer.as_ptr().cast::<c_void>(),
-            )
-        });
-        match result {
-            Ok(()) => {
-                self.transfer_in_flight = true;
-                Ok(())
-            }
-            Err(error) => {
+            let y_start = pixel_start / display::WIDTH as usize;
+            let y_end = y_start + pixels.len() / display::WIDTH as usize;
+            COLOR_TRANSFER_DONE.store(false, Ordering::Release);
+            if let Err(error) = esp!(unsafe {
+                sys::esp_lcd_panel_draw_bitmap(
+                    self.panel,
+                    0,
+                    y_start as i32,
+                    i32::from(display::WIDTH),
+                    y_end as i32,
+                    self.dma_buffer.as_ptr().cast::<c_void>(),
+                )
+            }) {
                 COLOR_TRANSFER_DONE.store(true, Ordering::Release);
-                Err(error.into())
+                return Err(error.into());
             }
+            self.transfer_in_flight = true;
+            pixel_start = pixel_end;
         }
+        Ok(())
     }
 
     fn wait_for_transfer(&mut self) {
@@ -184,6 +196,12 @@ impl LcdDisplay {
             FreeRtos::delay_ms(1);
         }
         self.transfer_in_flight = false;
+    }
+
+    pub(super) fn power_off(&mut self) -> Result<(), Box<dyn Error>> {
+        self.wait_for_transfer();
+        esp!(unsafe { sys::esp_lcd_panel_disp_on_off(self.panel, false) })?;
+        Ok(())
     }
 }
 

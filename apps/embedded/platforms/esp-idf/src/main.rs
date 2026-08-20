@@ -1,11 +1,11 @@
-mod apple_mux;
 mod backend;
 mod board;
 mod boards;
 mod idevice_bridge;
 mod iphone;
 mod location_store;
-mod usb_host;
+mod serial_provision;
+mod wifi_access;
 
 #[cfg(not(feature = "board-lichuang-esp32s3"))]
 compile_error!("select one supported board feature; try `board-lichuang-esp32s3`");

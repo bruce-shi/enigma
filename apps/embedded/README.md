@@ -6,9 +6,10 @@ boundary that changes when another board or runtime is added:
 
 ```text
 apps/embedded/
+├── bridge-protocol/              # checksummed desktop-to-board provisioning wire format
 ├── core/                         # portable no_std workflow and data model
 └── platforms/
-    └── esp-idf/                  # ESP-IDF runtime and USB transport prototype
+    └── esp-idf/                  # ESP-IDF runtime, Wi-Fi transport, and board support
         └── src/
             ├── board.rs          # abstract ESP-IDF board entry point
             ├── backend.rs        # core LocationBackend implementation
@@ -21,7 +22,9 @@ apps/embedded/
 `core` owns locations, actions, outcomes, recent-list ordering, and the
 `LocationBackend` contract. It is `no_std` and host-testable. Platform packages
 own persistence and device transport. Board modules own pins, peripherals, and
-physical input/output.
+physical input/output. `bridge-protocol` is shared with the desktop app so a
+Mac can transfer an existing Apple pairing identity to the board without
+putting private pairing data in a cloud service.
 
 ## Build and deploy
 
@@ -62,5 +65,5 @@ cargo run --release -- \
   individual board modules.
 
 The current ESP-IDF package selects `board-lichuang-esp32s3` by default. See
-[`platforms/esp-idf/README.md`](./platforms/esp-idf/README.md) for build and
-physical test instructions and the stock board's USB host limitation.
+[`platforms/esp-idf/README.md`](./platforms/esp-idf/README.md) for build,
+one-time pairing provisioning, Wi-Fi setup, and physical test instructions.

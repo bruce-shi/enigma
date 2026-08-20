@@ -2,6 +2,7 @@
 members = [
   "apps/desktop/src-tauri",
   "apps/embedded",
+  "apps/embedded/bridge-protocol",
   "apps/embedded/core",
 ]
 exclude = ["apps/embedded/platforms/esp-idf"]

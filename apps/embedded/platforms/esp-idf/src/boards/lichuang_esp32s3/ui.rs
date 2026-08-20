@@ -14,14 +14,19 @@ use embedded_graphics::{
     text::Text,
 };
 use enigma_embedded_core::{Action, Location, Outcome, promote};
-use esp_idf_svc::hal::{
-    delay::{BLOCK, FreeRtos},
-    gpio::PinDriver,
-    i2c::{I2cConfig, I2cDriver},
-    units::FromValueType,
+use esp_idf_svc::{
+    hal::{
+        delay::{BLOCK, FreeRtos},
+        gpio::{Level, PinDriver},
+        i2c::{I2cConfig, I2cDriver},
+        sleep::LightSleep,
+        units::FromValueType,
+    },
+    sys,
 };
 
 use super::{Hardware, display, lcd::LcdDisplay, shared_i2c};
+use crate::wifi_access::WifiAccessPoint;
 
 const ROW_COUNT: usize = 4;
 const ROW_TOP: i32 = 31;
@@ -31,6 +36,9 @@ const ACTION_TOP: i32 = 190;
 const UI_POLL_MS: u32 = 25;
 const UI_HEARTBEAT_TICKS: u32 = 400;
 const LCD_SELF_TEST_MS: u32 = 500;
+const POWER_BUTTON_HOLD_TICKS: u32 = 80;
+const POWER_BUTTON_RELEASE_DEBOUNCE_MS: u32 = 100;
+const POWER_OFF_MESSAGE_MS: u32 = 500;
 
 pub fn run<F>(
     hardware: Hardware,
@@ -45,6 +53,8 @@ where
     }
 
     let Hardware {
+        uart: _uart,
+        modem,
         spi,
         i2c,
         sclk,
@@ -53,7 +63,10 @@ where
         backlight,
         sda,
         scl,
+        boot_button,
     } = hardware;
+    let access_point = WifiAccessPoint::start(modem)
+        .map_err(|error| io::Error::other(format!("Wi-Fi access point failed: {error}")))?;
     log::info!("display: initializing I2C1 at 400 kHz");
     let mut i2c = I2cDriver::new(i2c, sda, scl, &I2cConfig::new().baudrate(400.kHz().into()))
         .map_err(|error| io::Error::other(format!("display I2C init failed: {error}")))?;
@@ -77,8 +90,9 @@ where
 
     let mut selected = 0usize;
     let mut scroll = 0usize;
-    let mut status = String::from("Select a location");
+    let mut status = access_point.display_label();
     let mut status_ok = true;
+    let mut location_active = false;
 
     backlight
         .set_low()
@@ -103,7 +117,72 @@ where
     let mut touch_was_down = false;
     let mut idle_ticks = 0u32;
     let mut touch_error_count = 0u32;
+    let mut power_button_ticks = 0u32;
     loop {
+        if boot_button.is_low() {
+            power_button_ticks = power_button_ticks.saturating_add(1);
+            if power_button_ticks >= POWER_BUTTON_HOLD_TICKS {
+                status = String::from("Release BOOT to power off");
+                status_ok = true;
+                render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                loop {
+                    while boot_button.is_low() {
+                        FreeRtos::delay_ms(UI_POLL_MS);
+                    }
+                    FreeRtos::delay_ms(POWER_BUTTON_RELEASE_DEBOUNCE_MS);
+                    if !boot_button.is_low() {
+                        break;
+                    }
+                }
+
+                if location_active {
+                    status = String::from("Restoring real GPS before power off...");
+                    render(&mut display, &catalog, selected, scroll, &status, true)?;
+                    let outcome = handle(Action::Restore);
+                    if outcome.success {
+                        location_active = false;
+                    } else {
+                        log::warn!("could not restore iPhone location before power off");
+                    }
+                }
+
+                status = if location_active {
+                    String::from("Powering off; restore GPS after wake")
+                } else {
+                    String::from("Powering off. Press BOOT to wake")
+                };
+                status_ok = !location_active;
+                render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                FreeRtos::delay_ms(POWER_OFF_MESSAGE_MS);
+
+                display.power_off()?;
+                backlight.set_high().map_err(|error| {
+                    io::Error::other(format!("backlight power-off failed: {error}"))
+                })?;
+                drop(access_point);
+                let mut sleep = LightSleep::new()?.wakeup_on_gpio(&boot_button, Level::Low)?;
+                log::info!("power off: entering low-power sleep; press BOOT to wake");
+                sleep.enter()?;
+
+                // GPIO0 is also the ESP32-S3 boot strap. Wait until it is high
+                // before restarting so a wake press cannot enter the ROM
+                // downloader instead of the Enigma firmware.
+                loop {
+                    while boot_button.is_low() {
+                        FreeRtos::delay_ms(UI_POLL_MS);
+                    }
+                    FreeRtos::delay_ms(POWER_BUTTON_RELEASE_DEBOUNCE_MS);
+                    if !boot_button.is_low() {
+                        break;
+                    }
+                }
+                log::info!("power button wake: restarting Enigma firmware");
+                unsafe { sys::esp_restart() };
+            }
+        } else {
+            power_button_ticks = 0;
+        }
+
         let touch = match read_touch(&mut i2c) {
             Ok(touch) => {
                 if touch_error_count > 0 {
@@ -151,13 +230,13 @@ where
         if i32::from(y) >= ACTION_TOP {
             let action = if x < 198 {
                 log::info!("touch action: set location `{}`", catalog[selected].name);
-                status = String::from("Connect, unlock, and Trust...");
+                status = String::from("Finding iPhone on Enigma Wi-Fi...");
                 status_ok = true;
                 render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
                 Action::Set(catalog[selected].clone())
             } else {
                 log::info!("touch action: restore real location");
-                status = String::from("Connecting to restore GPS...");
+                status = String::from("Finding iPhone to restore GPS...");
                 status_ok = true;
                 render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
                 Action::Restore
@@ -177,6 +256,9 @@ where
                 );
                 selected = 0;
                 scroll = 0;
+            }
+            if outcome.success {
+                location_active = applied;
             }
             status = outcome.message;
             status_ok = outcome.success;
@@ -265,7 +347,10 @@ fn render(
     Text::new("iPhone Location", Point::new(5, 12), title_style)
         .draw(display)
         .map_err(|_| io::Error::other("display title failed"))?;
-    Text::new(&truncate(status, 23), Point::new(5, 27), status_style)
+    Text::new("Hold BOOT: OFF", Point::new(232, 12), dim_style)
+        .draw(display)
+        .map_err(|_| io::Error::other("display power hint failed"))?;
+    Text::new(&truncate(status, 40), Point::new(5, 27), status_style)
         .draw(display)
         .map_err(|_| io::Error::other("display status failed"))?;
 

@@ -150,6 +150,43 @@ impl DeviceRuntime {
             .map_err(|_| "location service timed out".to_string())?
             .map_err(|_| "location service stopped before replying".to_string())?
     }
+
+    pub async fn pairing_record_for(&self, device_id: &str) -> Result<Vec<u8>, String> {
+        let descriptor = self
+            .descriptors
+            .read()
+            .await
+            .get(device_id)
+            .cloned()
+            .ok_or_else(|| "USB iPhone not found; scan again".to_string())?;
+        if descriptor.raw.connection_type != Connection::Usb {
+            return Err("select the USB-connected iPhone for board provisioning".into());
+        }
+        let provider = descriptor
+            .raw
+            .to_provider(UsbmuxdAddr::default(), "Enigma board provisioning");
+        let pairing_file = provider.get_pairing_file().await.map_err(classify_error)?;
+        let mut lockdown = LockdownClient::connect(&provider)
+            .await
+            .map_err(classify_error)?;
+        lockdown
+            .start_session(&pairing_file)
+            .await
+            .map_err(classify_error)?;
+        lockdown
+            .set_value(
+                "EnableWifiDebugging",
+                true.into(),
+                Some("com.apple.mobile.wireless_lockdown"),
+            )
+            .await
+            .map_err(classify_error)?;
+        let serialized = pairing_file.serialize().map_err(classify_error)?;
+        if serialized.len() > enigma_embedded_bridge_protocol::MAX_PAIRING_RECORD_BYTES {
+            return Err("the iPhone pairing record is too large for the board".into());
+        }
+        Ok(serialized)
+    }
 }
 
 #[async_trait]
@@ -165,6 +202,12 @@ impl DeviceAdapter for DeviceRuntime {
                 .entry(raw.udid.clone())
                 .or_insert_with(|| Uuid::new_v4().to_string())
                 .clone();
+            if descriptors.get(&id).is_some_and(|current: &Descriptor| {
+                current.raw.connection_type == Connection::Usb
+                    && raw.connection_type != Connection::Usb
+            }) {
+                continue;
+            }
             let summary = Self::inspect_device(&raw, id.clone()).await;
             descriptors.insert(id, Descriptor { raw, summary });
         }
