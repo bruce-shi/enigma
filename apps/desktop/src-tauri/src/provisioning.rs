@@ -5,16 +5,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use enigma_embedded_bridge_protocol::{
-    ERROR_PREFIX, OK_PREFIX, READY_LINE, encode_header, sha256_hex,
-};
+use enigma_embedded_bridge_protocol::{ERROR_PREFIX, OK_PREFIX, encode_header, sha256_hex};
 use serde::Serialize;
 use serialport::{FlowControl, SerialPort, SerialPortType};
 
 const BOARD_USB_VID: u16 = 0x1a86;
 const BOARD_USB_PID: u16 = 0x7522;
 const BOARD_BAUD: u32 = 115_200;
-const READY_TIMEOUT: Duration = Duration::from_secs(20);
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Serialize)]
@@ -36,15 +33,17 @@ pub fn provision_pairing_record(payload: &[u8]) -> Result<ProvisioningResult, St
         .open()
         .map_err(|error| format!("could not open Lichuang board at {board_port}: {error}"))?;
 
-    reset_into_firmware(&mut *port)?;
-    wait_for_marker(&mut *port, READY_LINE, READY_TIMEOUT).map_err(|error| {
-        format!(
-            "the board did not enter pairing provisioning mode: {error}; close any serial monitor and retry"
-        )
-    })?;
-
+    // The firmware keeps a UART listener alive while its touch UI runs. Avoid
+    // DTR/RTS reset pulses here: the Lichuang CH340K auto-reset circuit is not
+    // reliable enough to make provisioning depend on a short boot window.
+    thread::sleep(Duration::from_millis(100));
+    port.clear(serialport::ClearBuffer::Input)
+        .map_err(|error| format!("could not prepare the board serial input: {error}"))?;
     port.write_all(header.as_bytes())
-        .and_then(|()| port.write_all(payload))
+        .and_then(|()| port.flush())
+        .map_err(|error| format!("could not send the pairing record to the board: {error}"))?;
+    thread::sleep(Duration::from_millis(20));
+    port.write_all(payload)
         .and_then(|()| port.flush())
         .map_err(|error| format!("could not send the pairing record to the board: {error}"))?;
 
@@ -102,24 +101,6 @@ fn choose_board_port(mut ports: Vec<String>) -> Result<String, String> {
             "multiple Lichuang CH340K boards found; set ENIGMA_BOARD_PORT to choose one".into(),
         ),
     }
-}
-
-fn reset_into_firmware(port: &mut dyn SerialPort) -> Result<(), String> {
-    // Match the state expected by espflash's HardReset sequence. Its RTS pulse
-    // runs after the bootloader connection has left DTR deasserted; an
-    // arbitrary preserved DTR state can defeat the Lichuang board's two-
-    // transistor auto-reset circuit. The CH340K also needs time to settle
-    // after opening before its modem-control lines are reliable.
-    thread::sleep(Duration::from_millis(100));
-    port.write_data_terminal_ready(false)
-        .map_err(|error| format!("could not prepare the board reset: {error}"))?;
-    port.write_request_to_send(true)
-        .map_err(|error| format!("could not reset the board: {error}"))?;
-    thread::sleep(Duration::from_millis(100));
-    port.write_request_to_send(false)
-        .map_err(|error| format!("could not release board reset: {error}"))?;
-    thread::sleep(Duration::from_millis(100));
-    Ok(())
 }
 
 fn wait_for_marker(

@@ -13,9 +13,9 @@ local provisioning bridge. The board then creates a private Wi-Fi access point
 and connects directly to the joined iPhone using the imported Apple pairing
 identity.
 
-There is no Enigma login, account, cloud authentication, or remote pairing
-record storage. Apple's initial **Trust This Computer** approval is still
-mandatory and cannot be bypassed.
+There is no Enigma login, account, or cloud authentication. Apple's initial
+**Trust This Computer** and modern remote-pairing approval are still mandatory
+and cannot be bypassed.
 
 ## Why the iPhone transport uses Wi-Fi
 
@@ -64,30 +64,39 @@ and an 88 KiB NVS partition within the board's 16 MiB flash.
 2. Connect both the board and iPhone to the Mac. Unlock the iPhone and approve
    **Trust This Computer** if prompted.
 3. Open the Enigma desktop app, refresh devices, and choose **Provision board**
-   on the USB iPhone. The app enables Apple's Wi-Fi debugging setting, exports
-   the local usbmuxd pairing record, resets the board, and sends the record over
-   the CH340K UART using a length-checked SHA-256 protocol.
+   on the USB iPhone. The app enables Apple's Wi-Fi debugging setting and
+   provisions both the trusted Lockdown identity and the modern CoreDevice
+   remote-pairing identity. Approve Apple's pairing prompt if it appears. The
+   identities are sent to the board's persistent CH340K listener using a
+   length-checked SHA-256 protocol. No board reset is required.
 4. On the iPhone, join the SSID shown at the top of the board display
    (`Enigma-XXXX`). The password is `enigma-setup`. Choose **Use Without
    Internet** if iOS warns that the network has no internet.
-5. Keep the iPhone unlocked for the first test. Select a location on the board
-   and tap **SET LOCATION**. Tap **RESTORE** to return to real GPS.
+5. Keep the iPhone unlocked for the first test. Enter the default operator PIN
+   **1234** on the board; it unlocks immediately after the fourth digit. Select
+   a location and tap **SET LOCATION**. Tap **RESTORE** to return to real GPS.
 
 The board accepts one Wi-Fi client and learns its address from the ESP-IDF DHCP
-lease, so there is no discovery server or manual IP entry. Provisioning is
-available for five seconds when no pairing record exists and for three seconds
-on later boots. The desktop app resets the board after opening its serial port,
-so it can replace the record without requiring a long blank startup delay.
+lease. It discovers that phone's `_remotepairing._tcp` service with mDNS, then
+opens the iOS 17+ CoreDevice TLS-PSK tunnel using the provisioned identity;
+there is no manual IP or port entry. Provisioning remains available in a
+background UART listener whenever the normal touch UI is running.
+The desktop app therefore does not depend on the board's unreliable CH340K
+auto-reset circuit or a short startup window.
 
-The pairing record is sensitive and is currently stored in ordinary NVS; this
-prototype does not yet enable ESP32 flash/NVS encryption. Erase the board or
-hold BOOT during reset before transferring it to someone else.
+The pairing identities are sensitive and are currently stored in ordinary NVS;
+this prototype does not yet enable ESP32 flash/NVS encryption. Erase the board
+or hold BOOT during reset before transferring it to someone else.
 
 ## Touch UI and saved locations
 
 At boot, the screen cycles through white, red, green, and blue for 500 ms each,
-then shows six built-in presets. The top status line shows the board Wi-Fi SSID
-and password. Tap a row, or use **UP** and **DN**, then tap **SET LOCATION**.
+then opens a numeric lock screen. Enter the hardcoded prototype PIN **1234** to
+reach the six built-in presets; the fourth digit submits automatically so the
+bottom-edge **ENTER** button is not required. The lock screen also shows the
+board Wi-Fi SSID and password. Tap **LOCK** at the top right to protect the
+controls again without restarting. Tap a row, or use **UP** and **DN**, then tap
+**SET LOCATION**.
 The latest six successfully applied locations are stored in flash, moved to the
 top of the list, and remain available after reset.
 
@@ -102,6 +111,11 @@ to wake. The reset button keeps its normal reset behavior. This is a low-power
 software-off state; USB power remains connected and the board is not electrically
 disconnected.
 
+The operator PIN is only a first-pass physical UI gate. It is compiled into the
+firmware, has no secure retry limit, and does not encrypt pairing data or flash.
+Replace it with a provisioned credential plus encrypted storage before treating
+the board as resistant to a determined attacker.
+
 ## Flash and physical test
 
 ```sh
@@ -111,18 +125,20 @@ cargo run --release
 
 The serial monitor should progress through these checkpoints:
 
-1. `transport target: board Wi-Fi with imported Apple pairing identity`
-2. `Wi-Fi access point ready: SSID ...`
-3. `display: LCD chip-select asserted; native ST7789 initialized`
-4. `display: active-low GPIO42 backlight enabled`
-5. Four `display: showing ... LCD self-test` messages
-6. `display: first frame drawn; touch UI ready`
+1. `transport target: board Wi-Fi with imported Apple pairing identities`
+2. `persistent desktop pairing listener ready`
+3. `Wi-Fi access point ready: SSID ...`
+4. `display: LCD chip-select asserted; native ST7789 initialized`
+5. `display: active-low GPIO42 backlight enabled`
+6. Four `display: showing ... LCD self-test` messages
+7. `display: first frame drawn; touch UI locked and ready`
 
 After the iPhone joins, expect `Wi-Fi: iPhone received address ...`. A Set or
-Restore tap should then log either `iPhone modern location service ready` or
-the legacy fallback, followed by the successful action. Wi-Fi/iPhone runtime
-behavior is build-verified but still awaits physical acceptance; the display
-and touch path is physically verified.
+Restore tap should then log the discovered remote-pairing port, the announced
+CoreDevice tunnel port, `iPhone modern location service ready over Wi-Fi`, and
+the successful action. The legacy service is retained only for older iOS
+versions. Wi-Fi/iPhone runtime behavior is build-verified but still awaits
+physical acceptance; the display and touch path is physically verified.
 
 If flash succeeds but the monitor loses its connection, reopen it from the
 platform package:

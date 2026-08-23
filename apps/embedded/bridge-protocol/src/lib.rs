@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use alloc::{format, string::String};
+use alloc::{format, string::String, vec::Vec};
 use core::fmt::{self, Display};
 use sha2::{Digest, Sha256};
 
@@ -11,6 +11,13 @@ pub const OK_PREFIX: &str = "ENIGMA_PROVISION_OK";
 pub const ERROR_PREFIX: &str = "ENIGMA_PROVISION_ERROR";
 pub const HEADER_PREFIX: &str = "ENIGMA-PROVISION/1";
 pub const MAX_PAIRING_RECORD_BYTES: usize = 24 * 1024;
+const PAIRING_BUNDLE_MAGIC: &[u8] = b"ENIGMA-PAIR/2\0";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PairingBundle<'a> {
+    pub lockdown: &'a [u8],
+    pub remote: Option<&'a [u8]>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Header {
@@ -23,6 +30,7 @@ pub enum ProtocolError {
     BadHeader,
     BadLength,
     BadDigest,
+    BadPairingBundle,
     PayloadTooLarge,
 }
 
@@ -32,9 +40,57 @@ impl Display for ProtocolError {
             Self::BadHeader => "invalid provisioning header",
             Self::BadLength => "invalid pairing-record length",
             Self::BadDigest => "invalid pairing-record SHA-256",
+            Self::BadPairingBundle => "invalid pairing identity bundle",
             Self::PayloadTooLarge => "pairing record exceeds the provisioning limit",
         })
     }
+}
+
+pub fn encode_pairing_bundle(lockdown: &[u8], remote: &[u8]) -> Result<Vec<u8>, ProtocolError> {
+    if lockdown.is_empty() || remote.is_empty() || lockdown.len() > u32::MAX as usize {
+        return Err(ProtocolError::BadPairingBundle);
+    }
+    let payload_len = PAIRING_BUNDLE_MAGIC.len() + 4 + lockdown.len() + remote.len();
+    validate_payload_len(payload_len)?;
+
+    let mut payload = Vec::with_capacity(payload_len);
+    payload.extend_from_slice(PAIRING_BUNDLE_MAGIC);
+    payload.extend_from_slice(&(lockdown.len() as u32).to_be_bytes());
+    payload.extend_from_slice(lockdown);
+    payload.extend_from_slice(remote);
+    Ok(payload)
+}
+
+pub fn decode_pairing_bundle(payload: &[u8]) -> Result<PairingBundle<'_>, ProtocolError> {
+    validate_payload_len(payload.len())?;
+    if !payload.starts_with(PAIRING_BUNDLE_MAGIC) {
+        return Ok(PairingBundle {
+            lockdown: payload,
+            remote: None,
+        });
+    }
+    let length_offset = PAIRING_BUNDLE_MAGIC.len();
+    let lockdown_len = payload
+        .get(length_offset..length_offset + 4)
+        .and_then(|bytes| bytes.try_into().ok())
+        .map(u32::from_be_bytes)
+        .ok_or(ProtocolError::BadPairingBundle)? as usize;
+    let lockdown_start = length_offset + 4;
+    let remote_start = lockdown_start
+        .checked_add(lockdown_len)
+        .ok_or(ProtocolError::BadPairingBundle)?;
+    let lockdown = payload
+        .get(lockdown_start..remote_start)
+        .filter(|bytes| !bytes.is_empty())
+        .ok_or(ProtocolError::BadPairingBundle)?;
+    let remote = payload
+        .get(remote_start..)
+        .filter(|bytes| !bytes.is_empty())
+        .ok_or(ProtocolError::BadPairingBundle)?;
+    Ok(PairingBundle {
+        lockdown,
+        remote: Some(remote),
+    })
 }
 
 pub fn sha256_hex(payload: &[u8]) -> String {
@@ -143,5 +199,39 @@ mod tests {
     fn rejects_oversized_records() {
         let payload = alloc::vec![0; MAX_PAIRING_RECORD_BYTES + 1];
         assert_eq!(encode_header(&payload), Err(ProtocolError::PayloadTooLarge));
+    }
+
+    #[test]
+    fn pairing_bundle_round_trips_both_apple_identities() {
+        let payload = encode_pairing_bundle(b"lockdown", b"remote").unwrap();
+        assert_eq!(
+            decode_pairing_bundle(&payload),
+            Ok(PairingBundle {
+                lockdown: b"lockdown",
+                remote: Some(b"remote"),
+            })
+        );
+    }
+
+    #[test]
+    fn legacy_pairing_payload_remains_readable_for_migration() {
+        assert_eq!(
+            decode_pairing_bundle(b"legacy plist"),
+            Ok(PairingBundle {
+                lockdown: b"legacy plist",
+                remote: None,
+            })
+        );
+    }
+
+    #[test]
+    fn pairing_bundle_rejects_missing_remote_identity() {
+        let mut payload = PAIRING_BUNDLE_MAGIC.to_vec();
+        payload.extend_from_slice(&1_u32.to_be_bytes());
+        payload.push(b'x');
+        assert_eq!(
+            decode_pairing_bundle(&payload),
+            Err(ProtocolError::BadPairingBundle)
+        );
     }
 }

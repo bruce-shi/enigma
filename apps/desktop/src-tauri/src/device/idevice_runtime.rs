@@ -2,10 +2,11 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use idevice::{
-    IdeviceService, RsdService,
+    IdeviceService, RemoteXpcClient, RsdService,
     core_device_proxy::CoreDeviceProxy,
     dvt::{location_simulation::LocationSimulationClient, remote_server::RemoteServerClient},
     provider::IdeviceProvider,
+    remote_pairing::{RemotePairingClient, RpPairingFile},
     rsd::RsdHandshake,
     services::{lockdown::LockdownClient, simulate_location::LocationSimulationService},
     usbmuxd::{Connection, UsbmuxdAddr, UsbmuxdConnection, UsbmuxdDevice},
@@ -181,12 +182,56 @@ impl DeviceRuntime {
             )
             .await
             .map_err(classify_error)?;
-        let serialized = pairing_file.serialize().map_err(classify_error)?;
-        if serialized.len() > enigma_embedded_bridge_protocol::MAX_PAIRING_RECORD_BYTES {
-            return Err("the iPhone pairing record is too large for the board".into());
-        }
-        Ok(serialized)
+        let lockdown_record = pairing_file.serialize().map_err(classify_error)?;
+        let remote_record = tokio::time::timeout(
+            Duration::from_secs(90),
+            create_remote_pairing_record(&provider),
+        )
+        .await
+        .map_err(|_| {
+            "REMOTE_PAIRING_TIMEOUT: unlock the iPhone, approve the Apple pairing prompt, and retry"
+                .to_string()
+        })??;
+        enigma_embedded_bridge_protocol::encode_pairing_bundle(&lockdown_record, &remote_record)
+            .map_err(|error| error.to_string())
     }
+}
+
+async fn create_remote_pairing_record(provider: &dyn IdeviceProvider) -> Result<Vec<u8>, String> {
+    let proxy = CoreDeviceProxy::connect(provider)
+        .await
+        .map_err(classify_error)?;
+    let rsd_port = proxy.tunnel_info().server_rsd_port;
+    let adapter = proxy.create_software_tunnel().map_err(classify_error)?;
+    let mut adapter = adapter.to_async_handle();
+    let rsd_stream = adapter.connect(rsd_port).await.map_err(classify_error)?;
+    let handshake = RsdHandshake::new(rsd_stream)
+        .await
+        .map_err(classify_error)?;
+    let tunnel_service = handshake
+        .services
+        .get("com.apple.internal.dt.coredevice.untrusted.tunnelservice")
+        .ok_or_else(|| {
+            "DEVELOPER_SERVICE_UNAVAILABLE: remote pairing service missing".to_string()
+        })?;
+    let tunnel_stream = adapter
+        .connect(tunnel_service.port)
+        .await
+        .map_err(classify_error)?;
+    let mut connection = RemoteXpcClient::new(tunnel_stream)
+        .await
+        .map_err(classify_error)?;
+    connection.do_handshake().await.map_err(classify_error)?;
+    connection.recv_root().await.map_err(classify_error)?;
+
+    let host = "enigma-lichuang-esp32s3";
+    let mut pairing_file = RpPairingFile::generate(host);
+    let mut pairing = RemotePairingClient::new(connection, host);
+    pairing
+        .connect(&mut pairing_file, async || "000000".to_string())
+        .await
+        .map_err(classify_error)?;
+    Ok(pairing_file.to_bytes())
 }
 
 #[async_trait]

@@ -39,6 +39,7 @@ idevice = { git = "https://github.com/jkcoxson/idevice.git", rev = "63a341d7f624
   "mdns",
   "mobile_image_mounter",
   "pair",
+  "remote_pairing",
   "rsd",
   "tunnel_tcp_stack",
   "usbmuxd",

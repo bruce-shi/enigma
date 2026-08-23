@@ -20,14 +20,14 @@ Asset references append paths such as `/fonts/...` or `/sprites/...` directly to
 Validate a dataset and produce a SHA-256 object manifest before any upload:
 
 ```sh
-pnpm dataset:validate ./datasets/2026-08 2026-08 > ./datasets/2026-08.manifest.json
+bun run dataset:validate ./datasets/2026-08 2026-08 > ./datasets/2026-08.manifest.json
 ```
 
 Upload each manifest object beneath its exact `basemap/YYYY-MM/` key. For example:
 
 ```sh
-pnpm exec wrangler r2 object put enigma-maps/basemap/2026-08/global.pmtiles --file ./datasets/2026-08/global.pmtiles
-pnpm exec wrangler r2 object put enigma-maps/basemap/2026-08/style.json --file ./datasets/2026-08/style.json
+bunx wrangler r2 object put enigma-maps/basemap/2026-08/global.pmtiles --file ./datasets/2026-08/global.pmtiles
+bunx wrangler r2 object put enigma-maps/basemap/2026-08/style.json --file ./datasets/2026-08/style.json
 ```
 
 Promote a monthly dataset by changing `PMTILES_VERSION` only after every manifest

@@ -57,6 +57,88 @@ pub enum Action {
     Restore,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PinKey {
+    Digit(u8),
+    Clear,
+    Submit,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PinResult {
+    Pending,
+    Accepted,
+    Rejected,
+}
+
+/// Small allocation-free PIN gate shared by embedded user interfaces.
+///
+/// The expected PIN is still a firmware constant in the first prototype. This
+/// type keeps input handling independent from a specific display or touch
+/// controller so a later settings-backed credential can replace it cleanly.
+pub struct PinGate<const N: usize> {
+    expected: [u8; N],
+    entered: [u8; N],
+    entered_len: usize,
+}
+
+impl<const N: usize> PinGate<N> {
+    pub fn new(expected: [u8; N]) -> Self {
+        assert!(N > 0, "PIN must contain at least one digit");
+        assert!(
+            expected.iter().all(|digit| *digit <= 9),
+            "invalid PIN digit"
+        );
+        Self {
+            expected,
+            entered: [0; N],
+            entered_len: 0,
+        }
+    }
+
+    pub fn entered_len(&self) -> usize {
+        self.entered_len
+    }
+
+    pub fn clear(&mut self) {
+        self.entered.fill(0);
+        self.entered_len = 0;
+    }
+
+    pub fn apply(&mut self, key: PinKey) -> PinResult {
+        match key {
+            PinKey::Digit(digit) if digit <= 9 && self.entered_len < N => {
+                self.entered[self.entered_len] = digit;
+                self.entered_len += 1;
+                if self.entered_len == N {
+                    self.submit()
+                } else {
+                    PinResult::Pending
+                }
+            }
+            PinKey::Digit(_) => PinResult::Pending,
+            PinKey::Clear => {
+                self.clear();
+                PinResult::Pending
+            }
+            PinKey::Submit => self.submit(),
+        }
+    }
+
+    fn submit(&mut self) -> PinResult {
+        let mut difference = u8::from(self.entered_len != N);
+        for (entered, expected) in self.entered.iter().zip(self.expected.iter()) {
+            difference |= entered ^ expected;
+        }
+        self.clear();
+        if difference == 0 {
+            PinResult::Accepted
+        } else {
+            PinResult::Rejected
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Outcome {
     pub success: bool,
@@ -213,5 +295,38 @@ mod tests {
 
         let restored = application.handle(Action::Restore);
         assert_eq!(restored, Outcome::success("Real GPS restored"));
+    }
+
+    #[test]
+    fn pin_gate_accepts_only_the_complete_expected_pin() {
+        let mut gate = PinGate::new([1, 2, 3, 4]);
+        for digit in [1, 2, 3] {
+            assert_eq!(gate.apply(PinKey::Digit(digit)), PinResult::Pending);
+        }
+        assert_eq!(gate.entered_len(), 3);
+        assert_eq!(gate.apply(PinKey::Digit(4)), PinResult::Accepted);
+        assert_eq!(gate.entered_len(), 0);
+    }
+
+    #[test]
+    fn pin_gate_clears_input_after_rejection_or_clear() {
+        let mut gate = PinGate::new([1, 2, 3, 4]);
+        assert_eq!(gate.apply(PinKey::Digit(1)), PinResult::Pending);
+        assert_eq!(gate.apply(PinKey::Submit), PinResult::Rejected);
+        assert_eq!(gate.entered_len(), 0);
+
+        assert_eq!(gate.apply(PinKey::Digit(9)), PinResult::Pending);
+        assert_eq!(gate.apply(PinKey::Clear), PinResult::Pending);
+        assert_eq!(gate.entered_len(), 0);
+
+        for digit in [1, 2, 3, 9] {
+            let result = gate.apply(PinKey::Digit(digit));
+            if digit == 9 {
+                assert_eq!(result, PinResult::Rejected);
+            } else {
+                assert_eq!(result, PinResult::Pending);
+            }
+        }
+        assert_eq!(gate.entered_len(), 0);
     }
 }

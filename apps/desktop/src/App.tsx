@@ -24,6 +24,7 @@ import {
   ChevronUp,
   Download,
   Gamepad2,
+  LoaderCircle,
   LocateFixed,
   MapPinPlus,
   Pause,
@@ -61,6 +62,10 @@ import {
 } from "./workflows";
 
 type EditorMode = "teleport" | "route" | "joystick" | "gpx";
+type ProvisioningStatus = {
+  tone: "pending" | "success" | "error";
+  message: string;
+};
 
 const defaultSnapshot: SimulationSnapshot = {
   state: "idle",
@@ -98,7 +103,7 @@ export function App() {
   const [exitOpen, setExitOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [provisioningMessage, setProvisioningMessage] = useState<string>();
+  const [provisioningStatus, setProvisioningStatus] = useState<ProvisioningStatus>();
   const [crashConsent, setCrashConsent] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<DesktopUpdateInfo>();
   const [updateMessage, setUpdateMessage] = useState<string>();
@@ -246,12 +251,27 @@ export function App() {
   };
 
   const provisionBoard = async (deviceId: string) => {
-    setProvisioningMessage(undefined);
-    const result = await run(() => desktopApi.provisionEmbedded(deviceId));
-    if (!result) return;
-    setProvisioningMessage(
-      `Board provisioned on ${result.boardPort} · pairing ${result.pairingFingerprint}`,
-    );
+    setBusy(true);
+    setError(undefined);
+    setProvisioningStatus({
+      tone: "pending",
+      message:
+        "Provisioning board… keep the iPhone unlocked, approve Apple's pairing prompt, and close serial monitors.",
+    });
+    try {
+      const result = await desktopApi.provisionEmbedded(deviceId);
+      setProvisioningStatus({
+        tone: "success",
+        message: `Board provisioned on ${result.boardPort} · pairing ${result.pairingFingerprint}`,
+      });
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setError(message);
+      setProvisioningStatus({ tone: "error", message: `Provisioning failed: ${message}` });
+      reportFailure(cause);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const locateComputer = async () => {
@@ -545,9 +565,18 @@ export function App() {
                 touch screen.
               </li>
             </ol>
-            {provisioningMessage && (
-              <p className="mb-3 rounded-xl bg-success/15 p-3 text-xs font-medium text-success">
-                {provisioningMessage}
+            {provisioningStatus && (
+              <p
+                aria-live="polite"
+                className={`mb-3 rounded-xl p-3 text-xs font-medium ${
+                  provisioningStatus.tone === "success"
+                    ? "bg-success/15 text-success"
+                    : provisioningStatus.tone === "error"
+                      ? "bg-danger/15 text-danger"
+                      : "bg-accent/15 text-accent"
+                }`}
+              >
+                {provisioningStatus.message}
               </p>
             )}
             {devices.length === 0 ? (
@@ -596,7 +625,14 @@ export function App() {
                           size="sm"
                           variant="secondary"
                         >
-                          <Cable size={15} /> Provision board
+                          {provisioningStatus?.tone === "pending" ? (
+                            <LoaderCircle className="animate-spin" size={15} />
+                          ) : (
+                            <Cable size={15} />
+                          )}
+                          {provisioningStatus?.tone === "pending"
+                            ? "Provisioning…"
+                            : "Provision board"}
                         </Button>
                       ) : null}
                     </div>

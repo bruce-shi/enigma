@@ -20,11 +20,12 @@ apps/embedded/
 ```
 
 `core` owns locations, actions, outcomes, recent-list ordering, and the
-`LocationBackend` contract. It is `no_std` and host-testable. Platform packages
-own persistence and device transport. Board modules own pins, peripherals, and
-physical input/output. `bridge-protocol` is shared with the desktop app so a
-Mac can transfer an existing Apple pairing identity to the board without
-putting private pairing data in a cloud service.
+`LocationBackend` contract, plus the allocation-free operator PIN state
+machine. It is `no_std` and host-testable. Platform packages own persistence
+and device transport. Board modules own pins, peripherals, and physical
+input/output. `bridge-protocol` is shared with the desktop app so a Mac can
+transfer an existing Apple pairing identity to the board without putting
+private pairing data in a cloud service.
 
 ## Build and deploy
 

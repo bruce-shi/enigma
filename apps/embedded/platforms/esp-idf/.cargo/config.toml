@@ -7,7 +7,10 @@ linker = "ldproxy"
 # Keep espflash's bootloader, partition table, and application placement in
 # sync with this N16R8 board package. Without these flags espflash falls back
 # to its 4 MiB-style single-app table and places the ELF at 0x10000.
-runner = "espflash flash --monitor --flash-size 16mb --flash-mode dio --flash-freq 40mhz --partition-table partitions.csv --target-app-partition factory"
+# Use an explicit upload baud: espflash otherwise stays at its conservative
+# 115200 default, which can make this multi-megabyte Rust image painfully slow
+# over the board's CH340K USB-to-UART bridge.
+runner = "espflash flash --monitor --baud 460800 --flash-size 16mb --flash-mode dio --flash-freq 40mhz --partition-table partitions.csv --target-app-partition factory"
 rustflags = ["--cfg", "espidf_time64"]
 
 [unstable]

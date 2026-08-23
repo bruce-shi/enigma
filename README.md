@@ -25,11 +25,11 @@ device compatibility unless the matching test appears in that file.
 ## Local setup
 
 ```sh
-corepack enable
-pnpm install
-pnpm check
-pnpm test:run
-pnpm build
+bun --version
+bun install
+bun run check
+bun run test:run
+bun run build
 cargo test --workspace
 ```
 

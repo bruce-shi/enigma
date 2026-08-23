@@ -7,11 +7,11 @@ presented as a public installer.
 ## Automated preflight
 
 ```sh
-pnpm --filter @enigma/desktop release:check
-pnpm lint
-pnpm check
-pnpm test:run
-pnpm build
+bun --filter @enigma/desktop release:check
+bun run lint
+bun run check
+bun run test:run
+bun run build
 cargo fmt --all -- --check
 cargo check --workspace --all-targets
 cargo test --workspace --all-targets
@@ -53,7 +53,7 @@ Store Connect API variables (`APPLE_API_ISSUER`, `APPLE_API_KEY`,
 `APPLE_TEAM_ID`). Then build the DMG and verify:
 
 ```sh
-pnpm --filter @enigma/desktop tauri build --bundles dmg
+bun --filter @enigma/desktop tauri build --bundles dmg
 codesign --verify --deep --strict --verbose=2 "path/to/Enigma.app"
 spctl --assess --type execute --verbose=4 "path/to/Enigma.app"
 xcrun stapler validate "path/to/Enigma.app"

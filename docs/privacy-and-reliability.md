@@ -37,8 +37,9 @@ apply and verify a 30-day expiry rule on `enigma-crash-reports` using a Cloudfla
 with R2 write permission:
 
 ```sh
-pnpm --filter @enigma/web exec wrangler r2 bucket lifecycle add enigma-crash-reports --id crash-reports-30d --expire-days 30
-pnpm --filter @enigma/web exec wrangler r2 bucket lifecycle list enigma-crash-reports
+cd apps/web
+bunx wrangler r2 bucket lifecycle add enigma-crash-reports --id crash-reports-30d --expire-days 30
+bunx wrangler r2 bucket lifecycle list enigma-crash-reports
 ```
 
 Do not run this rule against `enigma-maps`. Record the returned production rule and a

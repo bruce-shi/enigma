@@ -3,6 +3,7 @@
   "files": {
     "includes": [
       "**",
+      "!**/.embuild",
       "!**/.turbo",
       "!**/.react-router",
       "!**/.wrangler",

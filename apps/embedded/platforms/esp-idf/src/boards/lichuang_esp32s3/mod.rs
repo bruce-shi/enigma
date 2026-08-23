@@ -6,7 +6,7 @@
 mod lcd;
 mod ui;
 
-use std::{error::Error, time::Duration};
+use std::error::Error;
 
 use enigma_embedded_core::{Action, Location, Outcome};
 use esp_idf_svc::hal::{
@@ -18,12 +18,12 @@ use esp_idf_svc::hal::{
     uart::{UartDriver, config::Config as UartConfig},
 };
 
-use crate::{board::EspIdfBoard, serial_provision};
+use crate::{board::EspIdfBoard, iphone, serial_provision};
 
 pub struct LichuangEsp32S3;
 
 pub(crate) struct Hardware {
-    uart: UartDriver<'static>,
+    uart: Option<UartDriver<'static>>,
     modem: Modem<'static>,
     spi: SPI3<'static>,
     i2c: I2C1<'static>,
@@ -58,7 +58,7 @@ impl EspIdfBoard for LichuangEsp32S3 {
 
         Ok((
             Hardware {
-                uart,
+                uart: Some(uart),
                 modem: peripherals.modem,
                 spi: peripherals.spi3,
                 i2c: peripherals.i2c1,
@@ -74,12 +74,15 @@ impl EspIdfBoard for LichuangEsp32S3 {
         ))
     }
 
-    fn receive_pairing(
-        hardware: &Self::Hardware,
-        timeout: Duration,
-    ) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
-        serial_provision::receive_pairing_record(&hardware.uart, timeout)
-            .map_err(|error| error.into())
+    fn start_pairing_listener(
+        hardware: &mut Self::Hardware,
+        storage: iphone::PairingStorage,
+    ) -> Result<(), Box<dyn Error>> {
+        let uart = hardware
+            .uart
+            .take()
+            .ok_or("CH340K pairing listener already started")?;
+        serial_provision::start(uart, storage).map_err(|error| error.into())
     }
 
     fn run_ui<F>(

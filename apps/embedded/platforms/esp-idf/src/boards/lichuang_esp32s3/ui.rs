@@ -13,7 +13,7 @@ use embedded_graphics::{
     primitives::{PrimitiveStyleBuilder, Rectangle},
     text::Text,
 };
-use enigma_embedded_core::{Action, Location, Outcome, promote};
+use enigma_embedded_core::{Action, Location, Outcome, PinGate, PinKey, PinResult, promote};
 use esp_idf_svc::{
     hal::{
         delay::{BLOCK, FreeRtos},
@@ -39,6 +39,12 @@ const LCD_SELF_TEST_MS: u32 = 500;
 const POWER_BUTTON_HOLD_TICKS: u32 = 80;
 const POWER_BUTTON_RELEASE_DEBOUNCE_MS: u32 = 100;
 const POWER_OFF_MESSAGE_MS: u32 = 500;
+const OPERATOR_PIN: [u8; 4] = [1, 2, 3, 4];
+const PIN_KEYPAD_LEFT: i32 = 5;
+const PIN_KEYPAD_TOP: i32 = 70;
+const PIN_KEY_WIDTH: u32 = 100;
+const PIN_KEY_HEIGHT: u32 = 37;
+const PIN_KEY_GAP: i32 = 3;
 
 pub fn run<F>(
     hardware: Hardware,
@@ -90,9 +96,13 @@ where
 
     let mut selected = 0usize;
     let mut scroll = 0usize;
-    let mut status = access_point.display_label();
+    let wifi_label = access_point.display_label();
+    let mut status = wifi_label.clone();
     let mut status_ok = true;
     let mut location_active = false;
+    let mut pin_gate = PinGate::new(OPERATOR_PIN);
+    let mut locked = true;
+    let mut lock_message = "Enter operator PIN";
 
     backlight
         .set_low()
@@ -111,8 +121,14 @@ where
         log::info!("display: showing {name} LCD self-test for {LCD_SELF_TEST_MS} ms");
         FreeRtos::delay_ms(LCD_SELF_TEST_MS);
     }
-    render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
-    log::info!("display: first frame drawn; touch UI ready");
+    render_lock(
+        &mut display,
+        &wifi_label,
+        lock_message,
+        true,
+        pin_gate.entered_len(),
+    )?;
+    log::info!("display: first frame drawn; touch UI locked and ready");
 
     let mut touch_was_down = false;
     let mut idle_ticks = 0u32;
@@ -122,9 +138,19 @@ where
         if boot_button.is_low() {
             power_button_ticks = power_button_ticks.saturating_add(1);
             if power_button_ticks >= POWER_BUTTON_HOLD_TICKS {
-                status = String::from("Release BOOT to power off");
-                status_ok = true;
-                render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                if locked {
+                    render_lock(
+                        &mut display,
+                        &wifi_label,
+                        "Release BOOT to power off",
+                        true,
+                        pin_gate.entered_len(),
+                    )?;
+                } else {
+                    status = String::from("Release BOOT to power off");
+                    status_ok = true;
+                    render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                }
                 loop {
                     while boot_button.is_low() {
                         FreeRtos::delay_ms(UI_POLL_MS);
@@ -136,8 +162,18 @@ where
                 }
 
                 if location_active {
-                    status = String::from("Restoring real GPS before power off...");
-                    render(&mut display, &catalog, selected, scroll, &status, true)?;
+                    if locked {
+                        render_lock(
+                            &mut display,
+                            &wifi_label,
+                            "Restoring GPS before power off...",
+                            true,
+                            pin_gate.entered_len(),
+                        )?;
+                    } else {
+                        status = String::from("Restoring real GPS before power off...");
+                        render(&mut display, &catalog, selected, scroll, &status, true)?;
+                    }
                     let outcome = handle(Action::Restore);
                     if outcome.success {
                         location_active = false;
@@ -146,13 +182,24 @@ where
                     }
                 }
 
-                status = if location_active {
-                    String::from("Powering off; restore GPS after wake")
+                let power_off_message = if location_active {
+                    "Powering off; restore GPS after wake"
                 } else {
-                    String::from("Powering off. Press BOOT to wake")
+                    "Powering off. Press BOOT to wake"
                 };
                 status_ok = !location_active;
-                render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                if locked {
+                    render_lock(
+                        &mut display,
+                        &wifi_label,
+                        power_off_message,
+                        status_ok,
+                        pin_gate.entered_len(),
+                    )?;
+                } else {
+                    status = String::from(power_off_message);
+                    render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                }
                 FreeRtos::delay_ms(POWER_OFF_MESSAGE_MS);
 
                 display.power_off()?;
@@ -226,8 +273,55 @@ where
 
         let (x, y) = touch.expect("checked above");
         log::info!("touch: press at ({x}, {y})");
+        if locked {
+            if let Some(key) = pin_key_at(x, y) {
+                match pin_gate.apply(key) {
+                    PinResult::Pending => {
+                        lock_message = "Enter operator PIN";
+                    }
+                    PinResult::Accepted => {
+                        locked = false;
+                        status = wifi_label.clone();
+                        status_ok = true;
+                        log::info!("operator PIN accepted; location controls unlocked");
+                    }
+                    PinResult::Rejected => {
+                        lock_message = "Wrong PIN; try again";
+                        log::warn!("operator PIN rejected");
+                    }
+                }
+            }
+            if locked {
+                render_lock(
+                    &mut display,
+                    &wifi_label,
+                    lock_message,
+                    lock_message == "Enter operator PIN",
+                    pin_gate.entered_len(),
+                )?;
+            } else {
+                render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+            }
+            FreeRtos::delay_ms(UI_POLL_MS);
+            continue;
+        }
+
         let mut redraw = false;
-        if i32::from(y) >= ACTION_TOP {
+        if i32::from(y) < ROW_TOP && x >= 260 {
+            pin_gate.clear();
+            locked = true;
+            lock_message = "Enter operator PIN";
+            log::info!("location controls locked");
+            render_lock(
+                &mut display,
+                &wifi_label,
+                lock_message,
+                true,
+                pin_gate.entered_len(),
+            )?;
+            FreeRtos::delay_ms(UI_POLL_MS);
+            continue;
+        } else if i32::from(y) >= ACTION_TOP {
             let action = if x < 198 {
                 log::info!("touch action: set location `{}`", catalog[selected].name);
                 status = String::from("Finding iPhone on Enigma Wi-Fi...");
@@ -326,6 +420,120 @@ fn read_touch(i2c: &mut I2cDriver<'_>) -> Result<Option<(u16, u16)>, Box<dyn Err
     Ok(Some((x, y)))
 }
 
+fn pin_key_at(x: u16, y: u16) -> Option<PinKey> {
+    let relative_x = i32::from(x) - PIN_KEYPAD_LEFT;
+    let relative_y = i32::from(y) - PIN_KEYPAD_TOP;
+    if relative_x < 0 || relative_y < 0 {
+        return None;
+    }
+
+    let column_stride = PIN_KEY_WIDTH as i32 + PIN_KEY_GAP;
+    let row_stride = PIN_KEY_HEIGHT as i32 + PIN_KEY_GAP;
+    let column = relative_x / column_stride;
+    let row = relative_y / row_stride;
+    if column >= 3
+        || row >= 4
+        || relative_x % column_stride >= PIN_KEY_WIDTH as i32
+        || relative_y % row_stride >= PIN_KEY_HEIGHT as i32
+    {
+        return None;
+    }
+
+    match (row, column) {
+        (0, 0) => Some(PinKey::Digit(1)),
+        (0, 1) => Some(PinKey::Digit(2)),
+        (0, 2) => Some(PinKey::Digit(3)),
+        (1, 0) => Some(PinKey::Digit(4)),
+        (1, 1) => Some(PinKey::Digit(5)),
+        (1, 2) => Some(PinKey::Digit(6)),
+        (2, 0) => Some(PinKey::Digit(7)),
+        (2, 1) => Some(PinKey::Digit(8)),
+        (2, 2) => Some(PinKey::Digit(9)),
+        (3, 0) => Some(PinKey::Clear),
+        (3, 1) => Some(PinKey::Digit(0)),
+        (3, 2) => Some(PinKey::Submit),
+        _ => None,
+    }
+}
+
+fn render_lock(
+    display: &mut LcdDisplay,
+    wifi_label: &str,
+    message: &str,
+    message_ok: bool,
+    entered_len: usize,
+) -> Result<(), Box<dyn Error>> {
+    display
+        .clear(Rgb565::new(2, 5, 8))
+        .map_err(|_| io::Error::other("display clear failed"))?;
+
+    let title_style = MonoTextStyle::new(&FONT_8X13_BOLD, Rgb565::WHITE);
+    let text_style = MonoTextStyle::new(&FONT_6X10, Rgb565::new(18, 38, 22));
+    let message_style = MonoTextStyle::new(
+        &FONT_6X10,
+        if message_ok {
+            Rgb565::CYAN
+        } else {
+            Rgb565::RED
+        },
+    );
+
+    Text::new("Enigma Locked", Point::new(5, 13), title_style)
+        .draw(display)
+        .map_err(|_| io::Error::other("display lock title failed"))?;
+    Text::new(&truncate(wifi_label, 40), Point::new(5, 28), text_style)
+        .draw(display)
+        .map_err(|_| io::Error::other("display lock Wi-Fi label failed"))?;
+    Text::new(&truncate(message, 40), Point::new(5, 43), message_style)
+        .draw(display)
+        .map_err(|_| io::Error::other("display lock message failed"))?;
+
+    let mut masked_pin = String::new();
+    for index in 0..OPERATOR_PIN.len() {
+        if index > 0 {
+            masked_pin.push(' ');
+        }
+        masked_pin.push(if index < entered_len { '*' } else { '_' });
+    }
+    Text::new(&masked_pin, Point::new(124, 65), title_style)
+        .draw(display)
+        .map_err(|_| io::Error::other("display masked PIN failed"))?;
+
+    for row in 0..4 {
+        for column in 0..3 {
+            let label = match (row, column) {
+                (0, 0) => "1",
+                (0, 1) => "2",
+                (0, 2) => "3",
+                (1, 0) => "4",
+                (1, 1) => "5",
+                (1, 2) => "6",
+                (2, 0) => "7",
+                (2, 1) => "8",
+                (2, 2) => "9",
+                (3, 0) => "CLEAR",
+                (3, 1) => "0",
+                (3, 2) => "ENTER",
+                _ => unreachable!(),
+            };
+            button(
+                display,
+                Rectangle::new(
+                    Point::new(
+                        PIN_KEYPAD_LEFT + column * (PIN_KEY_WIDTH as i32 + PIN_KEY_GAP),
+                        PIN_KEYPAD_TOP + row * (PIN_KEY_HEIGHT as i32 + PIN_KEY_GAP),
+                    ),
+                    Size::new(PIN_KEY_WIDTH, PIN_KEY_HEIGHT),
+                ),
+                label,
+                row == 3 && column == 2,
+            )?;
+        }
+    }
+    display.flush()?;
+    Ok(())
+}
+
 fn render(
     display: &mut LcdDisplay,
     catalog: &[Location],
@@ -347,9 +555,15 @@ fn render(
     Text::new("iPhone Location", Point::new(5, 12), title_style)
         .draw(display)
         .map_err(|_| io::Error::other("display title failed"))?;
-    Text::new("Hold BOOT: OFF", Point::new(232, 12), dim_style)
+    Text::new("Hold BOOT", Point::new(199, 12), dim_style)
         .draw(display)
         .map_err(|_| io::Error::other("display power hint failed"))?;
+    button(
+        display,
+        Rectangle::new(Point::new(260, 2), Size::new(58, 25)),
+        "LOCK",
+        false,
+    )?;
     Text::new(&truncate(status, 40), Point::new(5, 27), status_style)
         .draw(display)
         .map_err(|_| io::Error::other("display status failed"))?;

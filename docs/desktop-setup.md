@@ -8,7 +8,7 @@ device path is a Mac on the same LAN as a previously USB-paired iPhone running i
 Build the packaged Tauri application so the Vite frontend is embedded:
 
 ```sh
-pnpm --filter @enigma/desktop tauri build --bundles app
+bun --filter @enigma/desktop tauri build --bundles app
 open target/release/bundle/macos/Enigma.app
 ```
 
