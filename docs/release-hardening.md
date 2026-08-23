@@ -1,82 +1,34 @@
-# Desktop release hardening
+# Stable GitHub release process
 
-The implementation is release-shaped, but the current build is unsigned, unnotarized,
-versioned `0.0.0`, and has a placeholder updater public key. It must not be promoted or
-presented as a public installer.
+Official releases are created only from version tags and are hosted entirely on
+GitHub Releases. Enigma has one stable updater channel.
 
-## Automated preflight
+## Required configuration
 
-```sh
-bun --filter @enigma/desktop release:check
-bun run lint
-bun run check
-bun run test:run
-bun run build
-cargo fmt --all -- --check
-cargo check --workspace --all-targets
-cargo test --workspace --all-targets
-```
+1. Set a non-zero SemVer in `apps/desktop/src-tauri/tauri.conf.json`.
+2. Generate a Tauri updater keypair, commit only the public key, and store the private
+   key and password as GitHub Actions secrets.
+3. Configure Apple certificate, identity, notarization, and team secrets.
+4. Configure the base64 Windows code-signing certificate, password, and certificate
+   thumbprint secrets.
+5. Run `bun run release:check:production` and the complete validation suite.
 
-The development preflight validates bundle targets, release-only updater artifacts, stable/beta
-endpoint separation, minimum macOS version, updater capability, CSP invariants, and
-the location permission string while allowing credential placeholders. Before a real
-release, run `node scripts/verify-release-config.mjs` without `--development`; it must
-reject `0.0.0` and the placeholder updater public key.
+The tag-triggered release workflow checks that the `v<version>` tag matches the Tauri
+version and that every required secret is non-empty,
+imports the Windows certificate on the Windows runner, and builds updater artifacts
+into a draft GitHub release. A final job downloads and validates the complete
+`latest.json` before making the release public. Any missing placeholder, credential,
+signature, code-signing step, or build failure leaves the release unpublished.
 
-## Updater signing and channels
+## Safety acceptance
 
-1. Generate the updater key once with Tauri's `signer generate`; back up the private
-   key separately and never commit it.
-2. Put the public key text in `tauri.conf.json`. Provide the private key and password
-   only through the release environment.
-3. Build stable with `--config src-tauri/tauri.release.conf.json`. Build beta with
-   `--config src-tauri/tauri.beta.conf.json` and `VITE_UPDATE_CHANNEL=beta`. Ordinary
-   development bundles do not request updater artifacts or signing secrets.
-4. Copy the generated artifact signatures into a copy of the matching template.
-5. Validate the final manifest without `--allow-placeholders`.
-6. Upload artifacts first, verify their checksums, upload `latest.json` last, and then
-   test from the immediately previous signed build.
+- Installers must be OS-signed; macOS artifacts must also be notarized.
+- `latest.json` must contain HTTPS URLs for the same GitHub release and valid Tauri
+  signatures for every target.
+- Development builds keep `VITE_UPDATER_READY=false` and create no updater artifacts.
+- Release builds set `VITE_UPDATER_READY=true`.
+- Downloading may occur while idle, but installation must remain blocked whenever the
+  durable dirty marker is set or simulation state is not idle.
 
-Tauri signature verification is mandatory. `VITE_UPDATER_READY=true` may be set only
-after the public key and a reachable signed manifest are present. Enigma may check or
-download an update during a session, but the install function rechecks the durable
-dirty marker and simulation state. Installation is allowed only when both are clear;
-the user then quits and reopens Enigma. This avoids abandoning a location session,
-including on Windows where installer execution may exit the application.
-
-## macOS signing and notarization
-
-Use a valid Developer ID Application identity, supplied by `APPLE_SIGNING_IDENTITY` or
-the Tauri bundle configuration. Supply notarization credentials through either App
-Store Connect API variables (`APPLE_API_ISSUER`, `APPLE_API_KEY`,
-`APPLE_API_KEY_PATH`) or Apple ID variables (`APPLE_ID`, `APPLE_PASSWORD`,
-`APPLE_TEAM_ID`). Then build the DMG and verify:
-
-```sh
-bun --filter @enigma/desktop tauri build --bundles dmg
-codesign --verify --deep --strict --verbose=2 "path/to/Enigma.app"
-spctl --assess --type execute --verbose=4 "path/to/Enigma.app"
-xcrun stapler validate "path/to/Enigma.app"
-```
-
-Record the identity, notarization request result, stapling result, artifact SHA-256,
-and a clean-machine install/restore test. Never commit certificates or credentials.
-
-## Windows signing
-
-Build NSIS on the qualified Windows x64 runner and configure Tauri's Windows signing
-command for the selected certificate provider. Verify the installer and installed
-executable with Windows signature tooling, then run install, upgrade, uninstall, and
-restore tests on Windows 10 and 11. Windows signing and physical qualification remain
-deferred until the certificate and host are available.
-
-## Review conclusions
-
-- Security: restrictive CSP, scoped Tauri capabilities, signed-updater requirement,
-  no embedded release credentials, encrypted local records, and strict GPX parsing.
-- Privacy: no location or persistent device identifiers in D1, diagnostics, crash
-  payloads, or map URLs; crash delivery is explicit opt-in and authenticated.
-- Accessibility: shared axe, keyboard focus, theme, system-theme, reduced-motion, and
-  dialog tests pass. Native screen-reader and high-contrast checks remain physical.
-- Recovery: the durable dirty marker precedes device mutation; close and update
-  installation respect it; restore remains account-independent.
+Never upload updater private keys, certificate files, or notarization credentials as
+release assets or logs.

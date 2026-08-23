@@ -1,52 +1,35 @@
 # Troubleshooting
 
-## No iPhone appears
+## The USB iPhone appears but Wi-Fi does not
 
-- Confirm the iPhone is unlocked and still visible in Finder over Wi-Fi.
-- Reconnect by cable, approve Trust again, wait for Finder to finish syncing, then
-  rescan before removing the cable.
-- Put both devices on the same non-guest LAN and temporarily disconnect VPNs.
-- Client isolation or blocked local discovery cannot be repaired by Enigma.
+Unlock the iPhone, approve Trust, run **Enable desktop Wi-Fi**, put the Mac and iPhone
+on the same LAN, disconnect USB, and scan again. Finder or `usbmuxd` must retain the
+local pairing record. Apple pairing cannot be bypassed.
 
-## The device appears but is disabled
+## Board provisioning fails
 
-A trusted device discovered over Wi-Fi can be selected regardless of its reported iOS
-version. USB operation remains disabled. iOS versions without a completed physical test
-are experimental, so successful enumeration does not guarantee that the location service
-is available.
+Close serial monitors, connect the Lichuang board and iPhone by USB, keep the iPhone
+unlocked, and approve the modern Apple pairing prompt. On macOS, verify the CH340K
+driver and set `ENIGMA_BOARD_PORT` only when multiple physical boards are attached.
 
-## Trust or pairing failure
+## The map loads but search is disabled
 
-Reconnect by cable, unlock the iPhone, choose **Trust**, enter the passcode, and verify
-Finder access. A stale pairing record may require forgetting and pairing the device
-again.
+Open Settings and save your own Mapbox public `pk.` token. Secret `sk.` tokens are
+rejected. Manual map selection and coordinate entry do not require Mapbox.
 
-## Developer service unavailable
+## OpenFreeMap or Mapbox is unavailable
 
-Verify Developer Mode remained enabled after restart. If the service still fails,
-record the exact iOS build and export safe diagnostics. The tested iOS 26.5.2
-same-LAN path currently enumerates but cannot open the location service.
+Third-party map failures do not affect device Restore. Use decimal coordinates or a
+local GPX file, and retry the provider later.
 
-## A simulated location remains after stop or quit
+## Enigma reports an unfinished session
 
-1. Keep the iPhone connected to the same LAN and unlocked.
-2. Reopen Enigma.
-3. Select the same device.
-4. In the recovery prompt choose **Restore now**.
-
-Restore is local and does not require login, subscription, account access, or the map
-service. If Enigma cannot reconnect, rebooting the iPhone is the last-resort recovery;
-record the failure before doing so.
-
-## Maps are blank
-
-Movement controls do not require a loaded basemap. Verify normal Internet access and
-that the configured map style endpoint is reachable. Do not paste coordinates into a
-map URL; the gateway rejects query strings by design.
+Reconnect the same iPhone over Wi-Fi and choose Restore. The durable marker remains
+set until the device command succeeds. Never delete the local database merely to hide
+the warning.
 
 ## Updates are disabled
 
-Unsigned development builds cannot contact the updater. A release build must contain
-the production updater public key, set `VITE_UPDATER_READY=true`, and use a signed
-stable or beta manifest. Enigma blocks installation until the durable recovery marker
-is clear and the simulation state is idle.
+Unsigned development builds intentionally do not contact GitHub. Official builds need
+the committed updater public key and `VITE_UPDATER_READY=true`. Installation remains
+blocked until the current location is restored and simulation state is idle.

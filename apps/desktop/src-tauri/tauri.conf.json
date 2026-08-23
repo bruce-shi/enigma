@@ -11,7 +11,7 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.enigma.example https://api.mapbox.com https://maps.enigma.example https://enigma-map-gateway.bruceshi.workers.dev https://tiles.openfreemap.org; img-src 'self' asset: http://asset.localhost blob: data: https://maps.enigma.example https://enigma-map-gateway.bruceshi.workers.dev https://tiles.openfreemap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://maps.enigma.example https://enigma-map-gateway.bruceshi.workers.dev https://tiles.openfreemap.org; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.mapbox.com https://tiles.openfreemap.org; img-src 'self' asset: http://asset.localhost blob: data: https://tiles.openfreemap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://tiles.openfreemap.org; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'"
     },
     "windows": [
       {
@@ -38,13 +38,8 @@
     }
   },
   "plugins": {
-    "deep-link": {
-      "desktop": {
-        "schemes": ["enigma"]
-      }
-    },
     "updater": {
-      "endpoints": ["https://releases.enigma.example/updater/stable/latest.json"],
+      "endpoints": ["https://github.com/bruce-shi/enigma/releases/latest/download/latest.json"],
       "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY"
     }
   }

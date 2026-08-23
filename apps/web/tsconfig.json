@@ -5,8 +5,7 @@
     "workers",
     ".react-router/types/**/*",
     "vite.config.ts",
-    "react-router.config.ts",
-    "worker-configuration.d.ts"
+    "react-router.config.ts"
   ],
   "compilerOptions": {
     "jsx": "react-jsx",

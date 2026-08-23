@@ -1,5 +1,0 @@
-BETTER_AUTH_SECRET=replace-with-at-least-32-random-bytes
-STRIPE_SECRET_KEY=sk_test_replace
-STRIPE_WEBHOOK_SECRET=whsec_replace
-DESKTOP_TOKEN_SECRET=replace-with-at-least-32-random-bytes
-ENTITLEMENT_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nreplace\n-----END PRIVATE KEY-----

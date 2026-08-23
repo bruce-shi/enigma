@@ -166,22 +166,8 @@ impl DeviceRuntime {
         let provider = descriptor
             .raw
             .to_provider(UsbmuxdAddr::default(), "Enigma board provisioning");
+        enable_wifi_debugging(&provider).await?;
         let pairing_file = provider.get_pairing_file().await.map_err(classify_error)?;
-        let mut lockdown = LockdownClient::connect(&provider)
-            .await
-            .map_err(classify_error)?;
-        lockdown
-            .start_session(&pairing_file)
-            .await
-            .map_err(classify_error)?;
-        lockdown
-            .set_value(
-                "EnableWifiDebugging",
-                true.into(),
-                Some("com.apple.mobile.wireless_lockdown"),
-            )
-            .await
-            .map_err(classify_error)?;
         let lockdown_record = pairing_file.serialize().map_err(classify_error)?;
         let remote_record = tokio::time::timeout(
             Duration::from_secs(90),
@@ -195,6 +181,42 @@ impl DeviceRuntime {
         enigma_embedded_bridge_protocol::encode_pairing_bundle(&lockdown_record, &remote_record)
             .map_err(|error| error.to_string())
     }
+
+    pub async fn enable_desktop_wifi(&self, device_id: &str) -> Result<(), String> {
+        let descriptor = self
+            .descriptors
+            .read()
+            .await
+            .get(device_id)
+            .cloned()
+            .ok_or_else(|| "USB iPhone not found; scan again".to_string())?;
+        if descriptor.raw.connection_type != Connection::Usb {
+            return Err("select the USB-connected iPhone to enable desktop Wi-Fi".into());
+        }
+        let provider = descriptor
+            .raw
+            .to_provider(UsbmuxdAddr::default(), "Enigma desktop Wi-Fi setup");
+        enable_wifi_debugging(&provider).await
+    }
+}
+
+async fn enable_wifi_debugging(provider: &dyn IdeviceProvider) -> Result<(), String> {
+    let pairing_file = provider.get_pairing_file().await.map_err(classify_error)?;
+    let mut lockdown = LockdownClient::connect(provider)
+        .await
+        .map_err(classify_error)?;
+    lockdown
+        .start_session(&pairing_file)
+        .await
+        .map_err(classify_error)?;
+    lockdown
+        .set_value(
+            "EnableWifiDebugging",
+            true.into(),
+            Some("com.apple.mobile.wireless_lockdown"),
+        )
+        .await
+        .map_err(classify_error)
 }
 
 async fn create_remote_pairing_record(provider: &dyn IdeviceProvider) -> Result<Vec<u8>, String> {

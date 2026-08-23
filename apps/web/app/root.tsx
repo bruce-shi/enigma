@@ -1,20 +1,13 @@
 import "@enigma/ui/styles.css";
 import type { LinksFunction, MetaFunction } from "react-router";
-import {
-  isRouteErrorResponse,
-  Links,
-  Meta,
-  Outlet,
-  Scripts,
-  ScrollRestoration,
-  useRouteError,
-} from "react-router";
+import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, useRouteError } from "react-router";
 
 export const meta: MetaFunction = () => [
-  { title: "Enigma — iPhone location testing from your desktop" },
+  { title: "Enigma — open-source iPhone location testing" },
   {
     name: "description",
-    content: "A privacy-first desktop utility for controlled iPhone location simulation.",
+    content:
+      "A local-first GPL-3.0 desktop and embedded utility for controlled iPhone location simulation.",
   },
 ];
 
@@ -22,22 +15,18 @@ export const links: LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
 ];
 
-const themeScript = `(()=>{const m=document.cookie.match(/(?:^|; )enigma_theme=([^;]+)/);const p=m?decodeURIComponent(m[1]):'system';const d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'enigma-dark':'enigma-light';document.documentElement.classList.toggle('dark',d)})()`;
-
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="enigma-light" suppressHydrationWarning>
+    <html lang="en" data-theme="enigma-light">
       <head>
         <meta charSet="utf-8" />
         <meta content="width=device-width, initial-scale=1" name="viewport" />
         <meta content="light dark" name="color-scheme" />
         <Meta />
         <Links />
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
         {children}
-        <ScrollRestoration />
         <Scripts />
       </body>
     </html>

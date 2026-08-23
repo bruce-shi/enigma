@@ -143,12 +143,43 @@ impl LocalVault {
         self.get_bool_setting("dirty_session")
     }
 
-    pub fn set_crash_reporting_consent(&self, consent: bool) -> Result<(), String> {
-        self.set_bool_setting("crash_reporting_consent", consent)
+    pub fn set_mapbox_access_token(&self, token: Option<&str>) -> Result<(), String> {
+        let token = token.unwrap_or_default().trim();
+        if token.is_empty() {
+            self.connection
+                .lock()
+                .map_err(|_| "local database lock was poisoned".to_string())?
+                .execute(
+                    "DELETE FROM local_settings WHERE key='mapbox_access_token'",
+                    [],
+                )
+                .map_err(|error| error.to_string())?;
+            return Ok(());
+        }
+        validate_mapbox_access_token(token)?;
+        self.connection
+            .lock()
+            .map_err(|_| "local database lock was poisoned".to_string())?
+            .execute(
+                "INSERT INTO local_settings(key, value) VALUES ('mapbox_access_token', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                [token],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
     }
 
-    pub fn has_crash_reporting_consent(&self) -> Result<bool, String> {
-        self.get_bool_setting("crash_reporting_consent")
+    pub fn get_mapbox_access_token(&self) -> Result<Option<String>, String> {
+        self.connection
+            .lock()
+            .map_err(|_| "local database lock was poisoned".to_string())?
+            .query_row(
+                "SELECT value FROM local_settings WHERE key='mapbox_access_token'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())
     }
 
     fn set_bool_setting(&self, key: &str, value: bool) -> Result<(), String> {
@@ -255,6 +286,19 @@ impl LocalVault {
             )
             .map_err(|_| "local location data could not be decrypted".to_string())
     }
+}
+
+fn validate_mapbox_access_token(token: &str) -> Result<(), String> {
+    if token.len() <= 3
+        || token.len() > 2_048
+        || !token.starts_with("pk.")
+        || !token
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    {
+        return Err("Mapbox access token must be a public token beginning with pk.".into());
+    }
+    Ok(())
 }
 
 fn load_or_create_key(database_path: &Path) -> Result<[u8; 32], String> {
@@ -372,10 +416,41 @@ mod tests {
         assert!(vault.should_guard_exit());
         vault.set_dirty_session(false).unwrap();
         assert!(!vault.should_guard_exit());
-        assert!(!vault.has_crash_reporting_consent().unwrap());
-        vault.set_crash_reporting_consent(true).unwrap();
-        assert!(vault.has_crash_reporting_consent().unwrap());
-        vault.set_crash_reporting_consent(false).unwrap();
-        assert!(!vault.has_crash_reporting_consent().unwrap());
+        assert_eq!(vault.get_mapbox_access_token().unwrap(), None);
+        vault
+            .set_mapbox_access_token(Some(" pk.user-owned-public-token "))
+            .unwrap();
+        assert_eq!(
+            vault.get_mapbox_access_token().unwrap().as_deref(),
+            Some("pk.user-owned-public-token")
+        );
+        assert!(
+            vault
+                .set_mapbox_access_token(Some("sk.secret-token"))
+                .is_err()
+        );
+        vault.set_mapbox_access_token(None).unwrap();
+        assert_eq!(vault.get_mapbox_access_token().unwrap(), None);
+    }
+
+    #[test]
+    fn persists_the_public_mapbox_token_between_opens() {
+        let test_dir =
+            std::env::temp_dir().join(format!("enigma-mapbox-setting-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&test_dir).unwrap();
+        let database_path = test_dir.join("enigma.sqlite");
+        LocalVault::open(&database_path)
+            .unwrap()
+            .set_mapbox_access_token(Some("pk.persisted-public-token"))
+            .unwrap();
+        assert_eq!(
+            LocalVault::open(&database_path)
+                .unwrap()
+                .get_mapbox_access_token()
+                .unwrap()
+                .as_deref(),
+            Some("pk.persisted-public-token")
+        );
+        fs::remove_dir_all(test_dir).unwrap();
     }
 }

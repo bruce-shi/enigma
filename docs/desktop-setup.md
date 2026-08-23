@@ -1,74 +1,39 @@
 # Desktop setup
 
-This build intentionally bypasses login and subscription checks. It enables a Mac on
-the same LAN as a previously USB-paired iPhone. iOS versions without recorded physical
-evidence remain experimental.
+The desktop app works without an Enigma account or embedded board. Initial Apple
+pairing is local and still requires an unlocked iPhone, Trust approval, and Developer
+Mode where required by the iOS build.
 
-## Optional Mapbox location search
+## Desktop-only Wi-Fi setup
 
-Search is disabled until the person building Enigma supplies their own Mapbox public
-token. Copy the environment template:
+1. Connect the iPhone to the Mac by USB, unlock it, and approve **Trust This Computer**.
+2. Open Enigma, scan devices, and select **Enable desktop Wi-Fi** on the USB entry.
+3. Put the Mac and iPhone on the same normal Wi-Fi network.
+4. Disconnect USB, scan again, and connect to the Wi-Fi device entry.
+5. Select a map point and test Set/Restore before using routes or joystick movement.
 
-```sh
-cp apps/desktop/.env.example apps/desktop/.env.local
-```
+The current qualified path is macOS 12+ with the exact iOS 27 build recorded in the
+physical test matrix. Other visible devices remain unqualified until tested.
 
-Open `apps/desktop/.env.local`, set `VITE_MAPBOX_ACCESS_TOKEN=pk.…`, and restart the
-development server or rebuild the app. `.env.local` is git-ignored. A Vite environment
-value is embedded in the client bundle, so use only a Mapbox public token—never an
-`sk.…` secret token.
+## Optional embedded-board provisioning
 
-For development, run:
+Connect the supported Lichuang ESP32-S3 board and the trusted iPhone to the Mac, then
+choose **Provision embedded board** on the USB iPhone entry. Keep the phone unlocked,
+approve Apple's modern pairing prompt, and close serial monitors that own the CH340K
+port. The desktop transfers the pairing bundle directly to the board over serial.
 
-```sh
-bun --filter @enigma/desktop tauri dev
-```
+After provisioning, join the board SSID from the iPhone and follow the embedded guide.
+The board then works independently of the desktop and internet.
 
-## Build and launch the macOS app
+## Optional Mapbox search
 
-Build the packaged Tauri application so the Vite frontend is embedded:
+Open **Settings**, paste a client-visible Mapbox public token beginning with `pk.`, and
+save it. The token is stored in the desktop's local SQLite settings. Search queries and
+proximity coordinates go directly to Mapbox; Enigma does not proxy or retain them.
+OpenFreeMap and manual coordinate entry work without a token.
 
-```sh
-bun --filter @enigma/desktop tauri build --bundles app
-open target/release/bundle/macos/Enigma.app
-```
+## Local data and recovery
 
-Do not launch the desktop from the workspace with `cargo run --release` or build it
-with a plain `cargo build -p enigma-desktop --release`. Those commands compile the
-Rust host outside Tauri's frontend build context and can produce an empty window.
-
-## Before opening Enigma
-
-1. Use macOS 12 or later.
-2. Connect the unlocked iPhone to the Mac with a cable once and approve **Trust This
-   Computer**.
-3. In Finder, select the iPhone and enable **Show this iPhone when on Wi-Fi**.
-4. On the iPhone, enable **Settings → Privacy & Security → Developer Mode**, restart,
-   and confirm the prompt.
-5. Put the Mac and iPhone on the same ordinary LAN. Avoid guest Wi-Fi, client
-   isolation, VPN routing, and Personal Hotspot for this test.
-6. Disconnect the cable only after Finder can still see the iPhone over Wi-Fi.
-
-## First run
-
-1. Connect the Lichuang board and unlocked iPhone to the Mac, then click **Provision
-   board** beside the USB iPhone. Keep serial monitors closed while provisioning.
-2. On the iPhone, join the SSID and password shown on the board. Choose **Use Without
-   Internet** if iOS warns that the network has no internet access.
-3. Select the Wi-Fi device. A physically qualified device is labeled **Validated
-   same-LAN path**; other versions are labeled **Wi-Fi beta available**. USB entries
-   remain disabled after provisioning.
-4. Search to center the map, then click the map or enter decimal latitude and longitude.
-5. Use **Set location**, **Route**, **Joystick**, or **GPX**.
-6. Always choose **Restore** before disconnecting the device, installing an update,
-   or quitting Enigma.
-
-Routes, favorites, GPX contents, and history are encrypted before local SQLite
-storage. Use **Export safe diagnostics** when asking for help; inspect the JSON before
-sharing it.
-
-## Physical acceptance
-
-Follow `docs/desktop-m3-m4-acceptance.md` for the short end-to-end device pass and
-record the exact host, iOS version/build, transport, Enigma commit, and results in
-`docs/physical-test-matrix.md`.
+Favorites, history, GPX-derived plans, and routes are encrypted in the local vault.
+Every simulated session sets a durable recovery marker. Restore the real location
+before exiting or installing an update.

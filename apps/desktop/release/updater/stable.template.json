@@ -5,15 +5,15 @@
   "platforms": {
     "darwin-aarch64": {
       "signature": "REPLACE_WITH_TAURI_SIGNATURE",
-      "url": "https://releases.enigma.example/updater/stable/REPLACE_WITH_SIGNED_ARTIFACT"
+      "url": "https://github.com/bruce-shi/enigma/releases/download/v1.0.0/REPLACE_WITH_SIGNED_ARTIFACT"
     },
     "darwin-x86_64": {
       "signature": "REPLACE_WITH_TAURI_SIGNATURE",
-      "url": "https://releases.enigma.example/updater/stable/REPLACE_WITH_SIGNED_ARTIFACT"
+      "url": "https://github.com/bruce-shi/enigma/releases/download/v1.0.0/REPLACE_WITH_SIGNED_ARTIFACT"
     },
     "windows-x86_64": {
       "signature": "REPLACE_WITH_TAURI_SIGNATURE",
-      "url": "https://releases.enigma.example/updater/stable/REPLACE_WITH_SIGNED_ARTIFACT"
+      "url": "https://github.com/bruce-shi/enigma/releases/download/v1.0.0/REPLACE_WITH_SIGNED_ARTIFACT"
     }
   }
 }

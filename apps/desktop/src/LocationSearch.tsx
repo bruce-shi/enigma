@@ -11,9 +11,11 @@ import {
 const VANCOUVER: Coordinate = { latitude: 49.2827, longitude: -123.1207 };
 
 export function LocationSearch({
+  accessToken,
   center,
   onCenter,
 }: {
+  accessToken?: string;
   center?: Coordinate;
   onCenter: (coordinate: Coordinate) => void;
 }) {
@@ -25,7 +27,7 @@ export function LocationSearch({
   const [error, setError] = useState<string>();
   const sessionToken = useRef(createSessionToken());
   const language = globalThis.navigator.language.split("-")[0] || "en";
-  const configured = mapboxSearchConfigured();
+  const configured = mapboxSearchConfigured(accessToken);
 
   useEffect(() => {
     if (!configured) return;
@@ -42,6 +44,7 @@ export function LocationSearch({
       setError(undefined);
       void suggestLocations({
         query: trimmed,
+        accessToken: accessToken ?? "",
         sessionToken: sessionToken.current,
         proximity: center ?? VANCOUVER,
         language,
@@ -66,7 +69,7 @@ export function LocationSearch({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [center, configured, language, query]);
+  }, [accessToken, center, configured, language, query]);
 
   const choose = async (suggestion: LocationSuggestion) => {
     setLoading(true);
@@ -74,6 +77,7 @@ export function LocationSearch({
     try {
       const coordinate = await retrieveLocation({
         id: suggestion.id,
+        accessToken: accessToken ?? "",
         sessionToken: sessionToken.current,
         language,
       });
@@ -179,7 +183,7 @@ export function LocationSearch({
       )}
       {!configured && (
         <p className="mt-1 px-1 text-[11px] text-muted-foreground">
-          Set VITE_MAPBOX_ACCESS_TOKEN in apps/desktop/.env.local
+          Add a Mapbox public token in Settings
         </p>
       )}
     </search>

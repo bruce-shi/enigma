@@ -1,5 +1,8 @@
 # Enigma Embedded
 
+This firmware is licensed under GPL-3.0-only and has no Enigma-hosted runtime
+dependency.
+
 Embedded Enigma targets are applications, so they live under `apps/embedded`
 instead of a repository-level `firmware` directory. The code is split by the
 boundary that changes when another board or runtime is added:

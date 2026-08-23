@@ -17,6 +17,9 @@ There is no Enigma login, account, or cloud authentication. Apple's initial
 **Trust This Computer** and modern remote-pairing approval are still mandatory
 and cannot be bypassed.
 
+After the one-time local serial provisioning step, the board works independently
+of the desktop and internet.
+
 ## Why the iPhone transport uses Wi-Fi
 
 The board's only USB-C connector is wired to the upstream side of an on-board

@@ -90,54 +90,6 @@ export interface SimulationSnapshot {
   error?: string;
 }
 
-export interface SignedEntitlementPayload {
-  version: 1;
-  activationId: string;
-  plan: "monthly" | "yearly";
-  status: "trialing" | "active";
-  issuedAt: string;
-  refreshAfter: string;
-  validUntil: string;
-}
-
-export interface DesktopActivation {
-  id: string;
-  name: string;
-  platform: "macos" | "windows";
-  channel: "stable" | "beta";
-  createdAt: string;
-  lastSeenAt: string;
-  revokedAt?: string;
-}
-
-export interface CrashReportSubmission {
-  schemaVersion: 1;
-  appVersion: string;
-  platform: "macos" | "windows";
-  osVersion: string;
-  iosBuild?: string;
-  errorCode: string;
-  stackFrames: Array<{
-    symbol?: string;
-    module?: string;
-    line?: number;
-  }>;
-  coarseState: DeviceState | SimulationState;
-  occurredAt: string;
-}
-
-export interface CrashReport extends CrashReportSubmission {
-  reportId: string;
-}
-
-export interface ApiError {
-  error: {
-    code: string;
-    message: string;
-    requestId: string;
-  };
-}
-
 export const LOCATION_LIMITS = {
   minLatitude: -90,
   maxLatitude: 90,

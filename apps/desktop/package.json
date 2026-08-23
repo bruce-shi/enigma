@@ -1,13 +1,15 @@
 {
   "name": "@enigma/desktop",
   "version": "0.0.0",
+  "license": "GPL-3.0-only",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "vite build",
     "check": "tsc --noEmit",
     "dev": "vite",
-    "release:check": "node scripts/verify-release-config.mjs --development && node scripts/validate-updater-manifest.mjs stable release/updater/stable.template.json --allow-placeholders && node scripts/validate-updater-manifest.mjs beta release/updater/beta.template.json --allow-placeholders",
+    "release:check": "node scripts/verify-release-config.mjs --development && node scripts/validate-updater-manifest.mjs stable release/updater/stable.template.json --allow-placeholders",
+    "release:check:production": "node scripts/verify-release-config.mjs",
     "tauri": "tauri",
     "test": "vitest",
     "test:run": "vitest run --passWithNoTests"
@@ -18,12 +20,9 @@
     "@enigma/ui": "workspace:*",
     "@heroui/react": "catalog:",
     "@tauri-apps/api": "2.11.1",
-    "@tauri-apps/plugin-deep-link": "2.4.5",
-    "@tauri-apps/plugin-opener": "2.5.3",
     "@tauri-apps/plugin-updater": "2.9.0",
     "lucide-react": "1.32.0",
     "maplibre-gl": "6.4.1",
-    "pmtiles": "4.5.0",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

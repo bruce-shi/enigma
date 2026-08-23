@@ -1,6 +1,7 @@
 {
   "name": "enigma",
   "version": "0.0.0",
+  "license": "GPL-3.0-only",
   "private": true,
   "packageManager": "bun@1.3.9",
   "engines": {
@@ -15,8 +16,8 @@
     "test:run": "turbo run test:run",
     "desktop": "bun --filter @enigma/desktop",
     "web": "bun --filter @enigma/web",
-    "maps": "bun --filter @enigma/map-gateway",
-    "release:check": "bun --filter @enigma/desktop release:check && bun scripts/validate-public-release.mjs release/public-v1.template.json --allow-placeholders"
+    "release:check": "bun --filter @enigma/desktop release:check",
+    "release:check:production": "bun --filter @enigma/desktop release:check:production"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.9",

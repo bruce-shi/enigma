@@ -80,12 +80,12 @@ impl DeferredVault {
         self.open().map_or(true, LocalVault::should_guard_exit)
     }
 
-    fn set_crash_reporting_consent(&self, consent: bool) -> Result<(), String> {
-        self.open()?.set_crash_reporting_consent(consent)
+    fn get_mapbox_access_token(&self) -> Result<Option<String>, String> {
+        self.open()?.get_mapbox_access_token()
     }
 
-    fn has_crash_reporting_consent(&self) -> Result<bool, String> {
-        self.open()?.has_crash_reporting_consent()
+    fn set_mapbox_access_token(&self, token: Option<&str>) -> Result<(), String> {
+        self.open()?.set_mapbox_access_token(token)
     }
 }
 
@@ -132,6 +132,14 @@ async fn provision_embedded(
     tokio::task::spawn_blocking(move || provisioning::provision_pairing_record(&pairing_record))
         .await
         .map_err(|error| format!("board provisioning task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn enable_desktop_wifi(
+    state: tauri::State<'_, AppState>,
+    device_id: String,
+) -> Result<(), String> {
+    state.device.enable_desktop_wifi(&device_id).await
 }
 
 #[tauri::command]
@@ -329,20 +337,18 @@ async fn has_dirty_session(state: tauri::State<'_, AppState>) -> Result<bool, St
 }
 
 #[tauri::command]
-async fn get_crash_reporting_consent(state: tauri::State<'_, AppState>) -> Result<bool, String> {
-    run_vault_task(
-        state.vault.clone(),
-        DeferredVault::has_crash_reporting_consent,
-    )
-    .await
+async fn get_mapbox_access_token(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    run_vault_task(state.vault.clone(), DeferredVault::get_mapbox_access_token).await
 }
 
 #[tauri::command]
-fn set_crash_reporting_consent(
+fn set_mapbox_access_token(
     state: tauri::State<'_, AppState>,
-    consent: bool,
+    token: Option<String>,
 ) -> Result<(), String> {
-    state.vault.set_crash_reporting_consent(consent)
+    state.vault.set_mapbox_access_token(token.as_deref())
 }
 
 #[tauri::command]
@@ -388,7 +394,6 @@ async fn resolve_exit(
 async fn export_diagnostics(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let snapshot = state.simulation.snapshot().await;
     let dirty_session = state.vault.has_dirty_session()?;
-    let crash_reporting_consent = state.vault.has_crash_reporting_consent()?;
     let (devices, scan_error) = match state.device.list_devices().await {
         Ok(devices) => (devices, None),
         Err(error) => (Vec::new(), Some(classify_diagnostic_error(&error))),
@@ -397,7 +402,6 @@ async fn export_diagnostics(state: tauri::State<'_, AppState>) -> Result<String,
         &snapshot,
         &devices,
         dirty_session,
-        crash_reporting_consent,
         scan_error,
     ))
     .map_err(|error| error.to_string())
@@ -407,7 +411,6 @@ fn diagnostics_document(
     snapshot: &SimulationSnapshot,
     devices: &[DeviceSummary],
     dirty_session: bool,
-    crash_reporting_consent: bool,
     scan_error: Option<&str>,
 ) -> serde_json::Value {
     let network_device_count = devices
@@ -430,7 +433,6 @@ fn diagnostics_document(
         "ideviceRevision": "63a341d7f624b5c1f2540e4cecb269151a2caf52",
         "simulationState": snapshot.state,
         "dirtySession": dirty_session,
-        "crashReportingConsent": crash_reporting_consent,
         "connection": {
             "validatedPath": "macos_ios27_same_lan",
             "networkDeviceCount": network_device_count,
@@ -476,8 +478,6 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
-        .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             let data_dir = app.path().app_data_dir()?;
@@ -511,6 +511,7 @@ pub fn run() {
             connect_device,
             disconnect_device,
             provision_embedded,
+            enable_desktop_wifi,
             get_host_location,
             set_location,
             start_simulation,
@@ -524,8 +525,8 @@ pub fn run() {
             save_favorite,
             delete_saved_plan,
             has_dirty_session,
-            get_crash_reporting_consent,
-            set_crash_reporting_consent,
+            get_mapbox_access_token,
+            set_mapbox_access_token,
             recover_dirty_session,
             resolve_exit,
             export_diagnostics,
@@ -560,7 +561,7 @@ mod privacy_tests {
             state: DeviceState::Ready,
             diagnostic_code: None,
         }];
-        let serialized = diagnostics_document(&snapshot, &devices, true, false, None).to_string();
+        let serialized = diagnostics_document(&snapshot, &devices, true, None).to_string();
         for forbidden in [
             "49.2827",
             "-123.1207",
@@ -568,6 +569,8 @@ mod privacy_tests {
             "Personal iPhone",
             "private-model",
             "private-build",
+            "mapbox",
+            "pk.",
         ] {
             assert!(!serialized.contains(forbidden));
         }

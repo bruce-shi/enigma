@@ -24,7 +24,7 @@ const inTauri = () => "__TAURI_INTERNALS__" in globalThis;
 let mockSnapshot: SimulationSnapshot = { state: "idle", progress: 0, elapsedMs: 0 };
 const mockHistory: LocalPlanRecord[] = [];
 const mockFavorites: LocalPlanRecord[] = [];
-let mockCrashReportingConsent = false;
+let mockMapboxAccessToken: string | undefined;
 const browserPreviewDevices: DeviceSummary[] = [
   {
     id: "browser-preview",
@@ -74,6 +74,8 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
         pairingFingerprint: "0123456789ab",
         pairingBytes: 8192,
       } as T;
+    case "enable_desktop_wifi":
+      return undefined as T;
     case "get_simulation_snapshot":
       return mockSnapshot as T;
     case "set_location":
@@ -137,10 +139,10 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
     }
     case "has_dirty_session":
       return false as T;
-    case "get_crash_reporting_consent":
-      return mockCrashReportingConsent as T;
-    case "set_crash_reporting_consent":
-      mockCrashReportingConsent = Boolean(args?.consent);
+    case "get_mapbox_access_token":
+      return mockMapboxAccessToken as T;
+    case "set_mapbox_access_token":
+      mockMapboxAccessToken = typeof args?.token === "string" ? args.token : undefined;
       return undefined as T;
     case "export_diagnostics":
       return JSON.stringify(
@@ -190,6 +192,7 @@ export const desktopApi = {
   disconnectDevice: () => invoke<void>("disconnect_device"),
   provisionEmbedded: (deviceId: string) =>
     invoke<ProvisioningResult>("provision_embedded", { deviceId }),
+  enableDesktopWifi: (deviceId: string) => invoke<void>("enable_desktop_wifi", { deviceId }),
   getHostLocation: async () => {
     try {
       return await invoke<Coordinate>("get_host_location");
@@ -213,9 +216,9 @@ export const desktopApi = {
   deleteSavedPlan: (id: string, kind: SavedPlanKind) =>
     invoke<void>("delete_saved_plan", { id, kind }),
   exportDiagnostics: () => invoke<string>("export_diagnostics"),
-  getCrashReportingConsent: () => invoke<boolean>("get_crash_reporting_consent"),
-  setCrashReportingConsent: (consent: boolean) =>
-    invoke<void>("set_crash_reporting_consent", { consent }),
+  getMapboxAccessToken: () => invoke<string | null>("get_mapbox_access_token"),
+  setMapboxAccessToken: (token?: string) =>
+    invoke<void>("set_mapbox_access_token", { token: token || null }),
   hasDirtySession: () => invoke<boolean>("has_dirty_session"),
   recoverDirtySession: (choice: "restore" | "keep") =>
     invoke<void>("recover_dirty_session", { choice }),

@@ -10,9 +10,6 @@ of this pass.
 open /Volumes/data/enigma/target/debug/bundle/macos/Enigma.app
 ```
 
-Expected executable SHA-256:
-`ba692bbd2c5a629265903ec09299e425b1cb4377fb422eb15faedd78bb4a09ea`.
-
 Keep the iPhone close and use nearby test coordinates. If any operation reports an
 error, stop and use **Restore** before continuing.
 
@@ -29,7 +26,7 @@ error, stop and use **Restore** before continuing.
 - [ ] Start a location and close the window. **Restore and exit**, **Keep and exit**, and
       **Cancel** behave as labeled.
 - [ ] Choose **Keep and exit**, reopen, select the same iPhone, and confirm startup
-      recovery can restore without any login or subscription step.
+      recovery restores directly without any account or network-service step.
 
 ## M4 — Movement, Joystick, and GPX
 

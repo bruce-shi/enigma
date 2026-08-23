@@ -2,7 +2,6 @@ import { AppShell } from "@enigma/ui";
 import { Link as HeroLink } from "@heroui/react";
 import { type ButtonVariants, buttonVariants } from "@heroui/styles";
 import type { PropsWithChildren } from "react";
-import { Link as RouterLink } from "react-router";
 
 export function ButtonLink({
   to,
@@ -26,32 +25,27 @@ export function ButtonLink({
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell
-      context="Location testing"
+      context="Open-source location testing"
       navigation={
         <>
-          <ButtonLink to="/downloads" variant="ghost">
-            Downloads
+          <ButtonLink to="#features" variant="ghost">
+            Features
           </ButtonLink>
-          <ButtonLink to="/compatibility" variant="ghost">
+          <ButtonLink to="#compatibility" variant="ghost">
             Compatibility
           </ButtonLink>
-          <ButtonLink to="/pricing" variant="ghost">
-            Pricing
-          </ButtonLink>
-          <ButtonLink to="/dashboard" variant="ghost">
-            Account
+          <ButtonLink to="https://github.com/bruce-shi/enigma" variant="ghost">
+            GitHub
           </ButtonLink>
         </>
       }
+      showThemeToggle={false}
     >
       {children}
       <footer className="border-t border-border px-6 py-8 text-sm text-muted-foreground">
         <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-4">
-          <span>© 2026 Enigma</span>
-          <nav className="flex gap-4" aria-label="Legal">
-            <RouterLink to="/privacy">Privacy</RouterLink>
-            <RouterLink to="/terms">Terms</RouterLink>
-          </nav>
+          <span>Enigma is open source under GPL-3.0-only.</span>
+          <a href="https://github.com/bruce-shi/enigma/blob/main/LICENSE">License</a>
         </div>
       </footer>
     </AppShell>

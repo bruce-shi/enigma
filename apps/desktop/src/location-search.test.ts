@@ -7,7 +7,6 @@ import {
 } from "./location-search";
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
@@ -52,7 +51,6 @@ describe("Mapbox search responses", () => {
   });
 
   it("calls Mapbox directly with the builder's public token", async () => {
-    vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", "pk.builder-owned-public-token");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ suggestions: [] }), {
         headers: { "content-type": "application/json" },
@@ -62,6 +60,7 @@ describe("Mapbox search responses", () => {
 
     await suggestLocations({
       query: "Stanley Park",
+      accessToken: "pk.user-owned-public-token",
       sessionToken: "30cbf4b8-39f2-4d35-a52c-a47aa82e71c8",
       proximity: { latitude: 49.2827, longitude: -123.1207 },
       language: "en",
@@ -70,13 +69,15 @@ describe("Mapbox search responses", () => {
     const target = new URL(String(fetchMock.mock.calls[0]?.[0]));
     expect(target.origin).toBe("https://api.mapbox.com");
     expect(target.pathname).toBe("/search/searchbox/v1/suggest");
-    expect(target.searchParams.get("access_token")).toBe("pk.builder-owned-public-token");
+    expect(target.searchParams.get("access_token")).toBe("pk.user-owned-public-token");
     expect(target.searchParams.get("limit")).toBe("5");
     expect(target.searchParams.get("proximity")).toBe("-123.1207,49.2827");
   });
 
   it("stays disabled without a public token", () => {
-    vi.stubEnv("VITE_MAPBOX_ACCESS_TOKEN", "");
     expect(mapboxSearchConfigured()).toBe(false);
+    expect(mapboxSearchConfigured("pk.")).toBe(false);
+    expect(mapboxSearchConfigured("sk.secret-token")).toBe(false);
+    expect(mapboxSearchConfigured("pk.user-owned-public-token")).toBe(true);
   });
 });

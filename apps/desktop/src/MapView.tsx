@@ -1,7 +1,6 @@
 import type { Coordinate } from "@enigma/contracts";
 import type { Feature, FeatureCollection } from "geojson";
 import * as maplibregl from "maplibre-gl";
-import { Protocol } from "pmtiles";
 import { useEffect, useRef } from "react";
 
 const FALLBACK_CENTER: [number, number] = [-123.1207, 49.2827];
@@ -27,10 +26,6 @@ export function MapView({
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const protocol = new Protocol();
-    maplibregl.addProtocol("pmtiles", protocol.tile);
-    const configuredStyle = import.meta.env.VITE_MAP_STYLE_URL?.trim();
-    const style = configuredStyle || DEFAULT_MAP_STYLE_URL;
     const initialCenter = center
       ? ([center.longitude, center.latitude] as [number, number])
       : FALLBACK_CENTER;
@@ -38,7 +33,7 @@ export function MapView({
       container: containerRef.current,
       center: initialCenter,
       zoom: center ? 12 : 3,
-      style,
+      style: DEFAULT_MAP_STYLE_URL,
       attributionControl: false,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
@@ -75,7 +70,6 @@ export function MapView({
     return () => {
       markerRef.current?.remove();
       map.remove();
-      maplibregl.removeProtocol("pmtiles");
       mapRef.current = null;
     };
   }, []);

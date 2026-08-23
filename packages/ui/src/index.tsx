@@ -1,17 +1,6 @@
-import type { DeviceState, SignedEntitlementPayload, SimulationState } from "@enigma/contracts";
+import type { DeviceState, SimulationState } from "@enigma/contracts";
 import { AlertDialog, Button } from "@heroui/react";
-import {
-  CircleAlert,
-  CircleCheck,
-  Laptop,
-  MapPin,
-  Moon,
-  Pause,
-  Play,
-  RotateCcw,
-  Smartphone,
-  Sun,
-} from "lucide-react";
+import { Laptop, MapPin, Moon, Pause, Play, RotateCcw, Smartphone, Sun } from "lucide-react";
 import {
   type ComponentPropsWithoutRef,
   type PropsWithChildren,
@@ -99,6 +88,7 @@ export interface AppShellProps extends PropsWithChildren {
   context?: string;
   navigation?: ReactNode;
   actions?: ReactNode;
+  showThemeToggle?: boolean;
 }
 
 export function AppShell({
@@ -106,6 +96,7 @@ export function AppShell({
   context,
   navigation,
   actions,
+  showThemeToggle = true,
   children,
 }: AppShellProps) {
   return (
@@ -125,7 +116,7 @@ export function AppShell({
         </nav>
         <div className="flex items-center gap-2">
           {actions}
-          <ThemeToggle compact />
+          {showThemeToggle && <ThemeToggle compact />}
         </div>
       </header>
       <main>{children}</main>
@@ -170,18 +161,6 @@ export function DeviceStatus({
         </p>
       </div>
     </div>
-  );
-}
-
-export function EntitlementBadge({ entitlement }: { entitlement?: SignedEntitlementPayload }) {
-  const valid = entitlement && new Date(entitlement.validUntil).getTime() > Date.now();
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${valid ? "bg-success/15 text-success" : "bg-warning/20 text-warning-foreground"}`}
-    >
-      {valid ? <CircleCheck aria-hidden size={14} /> : <CircleAlert aria-hidden size={14} />}
-      {valid ? `${entitlement.status === "trialing" ? "Trial" : "Licensed"}` : "Restore only"}
-    </span>
   );
 }
 

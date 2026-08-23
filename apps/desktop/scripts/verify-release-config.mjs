@@ -1,14 +1,12 @@
 import { readFile } from "node:fs/promises";
 
 const development = process.argv.includes("--development");
-const [configuration, releaseConfiguration, betaConfiguration, capability, infoPlist] =
-  await Promise.all([
-    readJson(new URL("../src-tauri/tauri.conf.json", import.meta.url)),
-    readJson(new URL("../src-tauri/tauri.release.conf.json", import.meta.url)),
-    readJson(new URL("../src-tauri/tauri.beta.conf.json", import.meta.url)),
-    readJson(new URL("../src-tauri/capabilities/default.json", import.meta.url)),
-    readFile(new URL("../src-tauri/Info.plist", import.meta.url), "utf8"),
-  ]);
+const [configuration, releaseConfiguration, capability, infoPlist] = await Promise.all([
+  readJson(new URL("../src-tauri/tauri.conf.json", import.meta.url)),
+  readJson(new URL("../src-tauri/tauri.release.conf.json", import.meta.url)),
+  readJson(new URL("../src-tauri/capabilities/default.json", import.meta.url)),
+  readFile(new URL("../src-tauri/Info.plist", import.meta.url), "utf8"),
+]);
 
 const errors = [];
 if (configuration.bundle?.createUpdaterArtifacts === true) {
@@ -16,9 +14,6 @@ if (configuration.bundle?.createUpdaterArtifacts === true) {
 }
 if (releaseConfiguration.bundle?.createUpdaterArtifacts !== true) {
   errors.push("stable release overlay must create updater artifacts");
-}
-if (betaConfiguration.bundle?.createUpdaterArtifacts !== true) {
-  errors.push("beta release overlay must create updater artifacts");
 }
 if (!configuration.bundle?.targets?.includes("dmg")) errors.push("DMG bundle target is missing");
 if (!configuration.bundle?.targets?.includes("nsis")) errors.push("NSIS bundle target is missing");
@@ -29,18 +24,17 @@ if (!capability.permissions?.includes("updater:default")) {
   errors.push("updater permissions are missing");
 }
 const stableEndpoint = configuration.plugins?.updater?.endpoints?.[0] ?? "";
-const betaEndpoint = betaConfiguration.plugins?.updater?.endpoints?.[0] ?? "";
-if (!/^https:\/\//u.test(stableEndpoint) || !stableEndpoint.includes("/stable/")) {
+if (stableEndpoint !== "https://github.com/bruce-shi/enigma/releases/latest/download/latest.json") {
   errors.push("stable updater endpoint is invalid");
-}
-if (!/^https:\/\//u.test(betaEndpoint) || !betaEndpoint.includes("/beta/")) {
-  errors.push("beta updater endpoint is invalid");
 }
 const csp = configuration.app?.security?.csp ?? "";
 for (const directive of ["object-src 'none'", "frame-src 'none'", "base-uri 'none'"]) {
   if (!csp.includes(directive)) errors.push(`CSP is missing ${directive}`);
 }
 if (csp.includes("*")) errors.push("CSP must not contain wildcard sources");
+for (const forbidden of ["api.enigma", "maps.enigma", "enigma-map-gateway", "pmtiles"]) {
+  if (csp.includes(forbidden)) errors.push(`CSP still contains hosted service ${forbidden}`);
+}
 if (!infoPlist.includes("NSLocationWhenInUseUsageDescription")) {
   errors.push("macOS location purpose string is missing");
 }

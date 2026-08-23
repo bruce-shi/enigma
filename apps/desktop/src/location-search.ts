@@ -9,18 +9,20 @@ export type LocationSuggestion = {
   featureType?: string;
 };
 
-export function mapboxSearchConfigured(): boolean {
-  return mapboxAccessToken() !== undefined;
+export function mapboxSearchConfigured(accessToken?: string): boolean {
+  return validMapboxAccessToken(accessToken);
 }
 
 export async function suggestLocations({
   query,
+  accessToken,
   sessionToken,
   proximity,
   language,
   signal,
 }: {
   query: string;
+  accessToken: string;
   sessionToken: string;
   proximity?: Coordinate;
   language?: string;
@@ -29,7 +31,7 @@ export async function suggestLocations({
   const url = new URL("/search/searchbox/v1/suggest", MAPBOX_SEARCH_ORIGIN);
   url.searchParams.set("q", query);
   url.searchParams.set("session_token", sessionToken);
-  url.searchParams.set("access_token", requiredMapboxAccessToken());
+  url.searchParams.set("access_token", requiredMapboxAccessToken(accessToken));
   url.searchParams.set("limit", "5");
   if (proximity) {
     url.searchParams.set("proximity", `${proximity.longitude},${proximity.latitude}`);
@@ -41,11 +43,13 @@ export async function suggestLocations({
 
 export async function retrieveLocation({
   id,
+  accessToken,
   sessionToken,
   language,
   signal,
 }: {
   id: string;
+  accessToken: string;
   sessionToken: string;
   language?: string;
   signal?: AbortSignal;
@@ -55,7 +59,7 @@ export async function retrieveLocation({
     MAPBOX_SEARCH_ORIGIN,
   );
   url.searchParams.set("session_token", sessionToken);
-  url.searchParams.set("access_token", requiredMapboxAccessToken());
+  url.searchParams.set("access_token", requiredMapboxAccessToken(accessToken));
   if (language) url.searchParams.set("language", language);
   const payload = await requestJson(url, signal);
   return parseRetrievedCoordinate(payload);
@@ -102,15 +106,17 @@ export function parseRetrievedCoordinate(payload: unknown): Coordinate {
   return { latitude, longitude };
 }
 
-function mapboxAccessToken(): string | undefined {
-  const token = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN?.trim();
-  return token?.startsWith("pk.") ? token : undefined;
+function validMapboxAccessToken(accessToken?: string): accessToken is string {
+  const token = accessToken?.trim();
+  return Boolean(
+    token && token.length > 3 && token.length <= 2_048 && /^pk\.[\w.-]+$/u.test(token),
+  );
 }
 
-function requiredMapboxAccessToken(): string {
-  const token = mapboxAccessToken();
-  if (!token) {
-    throw new Error("Add a Mapbox public token in VITE_MAPBOX_ACCESS_TOKEN");
+function requiredMapboxAccessToken(accessToken?: string): string {
+  const token = accessToken?.trim();
+  if (!validMapboxAccessToken(token)) {
+    throw new Error("Add a Mapbox public token in Settings");
   }
   return token;
 }

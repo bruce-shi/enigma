@@ -11,8 +11,8 @@ recorded in `MILESTONES.md`.
 3. Approve **Trust This Computer** on the iPhone and enter its passcode.
 4. Enable **Settings → Privacy & Security → Developer Mode**, then restart and
    confirm the prompt on the iPhone.
-5. For Wi-Fi beta, enable **Show this iPhone when on Wi-Fi** in Finder. Complete
-   the first Enigma connection over USB before removing the cable.
+5. In Enigma, choose **Enable desktop Wi-Fi** on the trusted USB device. Put the
+   Mac and iPhone on the same LAN, disconnect USB, and scan again.
 
 ## Windows
 
@@ -48,6 +48,5 @@ transport, command, result, and any diagnostic code in `MILESTONES.md`.
   discovery.
 - VPN subnets, Internet control, and iPhone personal-hotspot topology are not
   supported claims.
-- The release target requires Wi-Fi failures never to prevent USB fallback, but USB is
-  disabled in the current build until physical qualification. Wi-Fi failures must not
-  prevent the restore command for an already selected same-LAN device.
+- USB runtime control is disabled until physical qualification. Wi-Fi failures must
+  not prevent the restore command for an already selected same-LAN device.

@@ -45,7 +45,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type DesktopRoute, desktopRouteFromHash, desktopRouteHash } from "./desktop-route";
 import { LocationSearch } from "./LocationSearch";
 import { MapView } from "./MapView";
-import { createCrashReport, submitCrashReport } from "./privacy";
 import { SettingsPage } from "./SettingsPage";
 import { desktopApi, type LocalPlanRecord, type SavedPlanKind } from "./tauri";
 import {
@@ -69,6 +68,7 @@ type EditorMode = "teleport" | "route" | "joystick" | "gpx";
 type ProvisioningStatus = {
   tone: "pending" | "success" | "error";
   message: string;
+  operation?: "desktop" | "board";
 };
 
 const defaultSnapshot: SimulationSnapshot = {
@@ -111,7 +111,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [provisioningStatus, setProvisioningStatus] = useState<ProvisioningStatus>();
-  const [crashConsent, setCrashConsent] = useState(false);
+  const [mapboxAccessToken, setMapboxAccessToken] = useState<string>();
   const [availableUpdate, setAvailableUpdate] = useState<DesktopUpdateInfo>();
   const [updateMessage, setUpdateMessage] = useState<string>();
   const joystickMovementRef = useRef<Promise<boolean> | undefined>(undefined);
@@ -131,51 +131,32 @@ export function App() {
     }
   }, []);
 
-  const reportFailure = useCallback(
-    (cause: unknown) => {
-      void submitCrashReport({
-        consent: crashConsent,
-        endpoint: import.meta.env.VITE_CRASH_REPORT_URL,
-        report: createCrashReport(cause, "error"),
-      });
-    },
-    [crashConsent],
-  );
+  const run = useCallback(async <T,>(operation: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      setBusy(true);
+      setError(undefined);
+      return await operation();
+    } catch (cause) {
+      setError(errorMessage(cause));
+      return undefined;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
-  const run = useCallback(
-    async <T,>(operation: () => Promise<T>): Promise<T | undefined> => {
-      try {
-        setBusy(true);
-        setError(undefined);
-        return await operation();
-      } catch (cause) {
-        setError(errorMessage(cause));
-        reportFailure(cause);
-        return undefined;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [reportFailure],
-  );
-
-  const runAction = useCallback(
-    async (operation: () => Promise<void>): Promise<boolean> => {
-      try {
-        setBusy(true);
-        setError(undefined);
-        await operation();
-        return true;
-      } catch (cause) {
-        setError(errorMessage(cause));
-        reportFailure(cause);
-        return false;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [reportFailure],
-  );
+  const runAction = useCallback(async (operation: () => Promise<void>): Promise<boolean> => {
+    try {
+      setBusy(true);
+      setError(undefined);
+      await operation();
+      return true;
+    } catch (cause) {
+      setError(errorMessage(cause));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const refreshDevices = useCallback(async () => {
     const next = await run(desktopApi.listDevices);
@@ -206,8 +187,8 @@ export function App() {
       })
       .catch(() => undefined);
     void desktopApi
-      .getCrashReportingConsent()
-      .then(setCrashConsent)
+      .getMapboxAccessToken()
+      .then((token) => setMapboxAccessToken(token ?? undefined))
       .catch(() => undefined);
   }, [refreshDevices, refreshLibrary]);
 
@@ -277,6 +258,7 @@ export function App() {
     setError(undefined);
     setProvisioningStatus({
       tone: "pending",
+      operation: "board",
       message:
         "Provisioning board… keep the iPhone unlocked, approve Apple's pairing prompt, and close serial monitors.",
     });
@@ -290,7 +272,30 @@ export function App() {
       const message = errorMessage(cause);
       setError(message);
       setProvisioningStatus({ tone: "error", message: `Provisioning failed: ${message}` });
-      reportFailure(cause);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const enableDesktopWifi = async (deviceId: string) => {
+    setBusy(true);
+    setError(undefined);
+    setProvisioningStatus({
+      tone: "pending",
+      operation: "desktop",
+      message: "Enabling desktop Wi-Fi… keep the iPhone unlocked and approve Trust if prompted.",
+    });
+    try {
+      await desktopApi.enableDesktopWifi(deviceId);
+      setProvisioningStatus({
+        tone: "success",
+        message:
+          "Desktop Wi-Fi enabled. Put this Mac and iPhone on the same network, disconnect USB, then scan again.",
+      });
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setError(message);
+      setProvisioningStatus({ tone: "error", message: `Wi-Fi setup failed: ${message}` });
     } finally {
       setBusy(false);
     }
@@ -507,9 +512,10 @@ export function App() {
     downloadTextFile(contents, "enigma-diagnostics.json", "application/json");
   };
 
-  const updateCrashConsent = async (consent: boolean) => {
-    if (!(await runAction(() => desktopApi.setCrashReportingConsent(consent)))) return;
-    setCrashConsent(consent);
+  const saveMapboxAccessToken = async (token?: string): Promise<boolean> => {
+    if (!(await runAction(() => desktopApi.setMapboxAccessToken(token)))) return false;
+    setMapboxAccessToken(token);
+    return true;
   };
 
   const onMapClick = (next: Coordinate) => {
@@ -587,14 +593,14 @@ export function App() {
         <SettingsPage
           availableUpdate={availableUpdate}
           busy={busy}
-          crashConsent={crashConsent}
+          error={error}
+          mapboxAccessToken={mapboxAccessToken}
           onBack={() => navigate("workspace")}
           onCheckForUpdates={() => void checkForUpdates()}
           onDownloadDiagnostics={() => void downloadDiagnostics()}
           onInstallUpdate={() => void installUpdate()}
-          onUpdateCrashConsent={(consent) => void updateCrashConsent(consent)}
+          onSaveMapboxAccessToken={saveMapboxAccessToken}
           updateBlockedReason={updateGate.allowed ? undefined : updateGate.reason}
-          updateChannel={import.meta.env.VITE_UPDATE_CHANNEL ?? "stable"}
           updateMessage={updateMessage}
           updaterAvailable={updaterConfigured()}
         />
@@ -618,7 +624,7 @@ export function App() {
       actions={
         <>
           <span className="hidden rounded-full bg-success/15 px-3 py-1 text-xs font-semibold text-success md:inline-flex">
-            Login bypassed
+            No account required
           </span>
           <Button isDisabled={busy} onPress={refreshDevices} variant="ghost">
             <RefreshCw size={16} /> Refresh
@@ -641,12 +647,9 @@ export function App() {
               </div>
             ) : (
               <ol className="mb-4 grid gap-2 text-sm text-muted-foreground">
-                <li>1. Connect both the Lichuang board and iPhone to this Mac.</li>
-                <li>2. Unlock the iPhone, approve Trust, then provision the USB device below.</li>
-                <li>
-                  3. Join the Wi-Fi shown on the board, choose Use Without Internet, then use its
-                  touch screen.
-                </li>
+                <li>1. Connect and unlock the iPhone by USB, then approve Apple Trust.</li>
+                <li>2. Enable desktop Wi-Fi, provision the embedded board, or do both.</li>
+                <li>3. For desktop use, reconnect with this Mac and iPhone on the same network.</li>
               </ol>
             )}
             {provisioningStatus && (
@@ -666,7 +669,7 @@ export function App() {
             {devices.length === 0 ? (
               <EmptyState
                 title="No iPhone found"
-                description="Connect and unlock the iPhone by USB for initial board provisioning. Afterward, the board connects directly over its own Wi-Fi."
+                description="Connect and unlock the iPhone by USB for first-time local pairing. No Enigma account or cloud service is required."
                 action={
                   <Button onPress={refreshDevices}>
                     <Wifi size={16} /> Scan devices
@@ -719,22 +722,35 @@ export function App() {
                           {selected ? "Switch to this iPhone" : "Connect over Wi-Fi"}
                         </Button>
                       ) : device.transport === "usb" && device.state === "ready" ? (
-                        <Button
-                          className="mt-3 w-full"
-                          isDisabled={busy}
-                          onPress={() => void provisionBoard(device.id)}
-                          size="sm"
-                          variant="secondary"
-                        >
-                          {provisioningStatus?.tone === "pending" ? (
-                            <LoaderCircle className="animate-spin" size={15} />
-                          ) : (
-                            <Cable size={15} />
-                          )}
-                          {provisioningStatus?.tone === "pending"
-                            ? "Provisioning…"
-                            : "Provision board"}
-                        </Button>
+                        <div className="mt-3 grid gap-2">
+                          <Button
+                            isDisabled={busy}
+                            onPress={() => void enableDesktopWifi(device.id)}
+                            size="sm"
+                          >
+                            {provisioningStatus?.tone === "pending" &&
+                            provisioningStatus.operation === "desktop" ? (
+                              <LoaderCircle className="animate-spin" size={15} />
+                            ) : (
+                              <Wifi size={15} />
+                            )}
+                            Enable desktop Wi-Fi
+                          </Button>
+                          <Button
+                            isDisabled={busy}
+                            onPress={() => void provisionBoard(device.id)}
+                            size="sm"
+                            variant="secondary"
+                          >
+                            {provisioningStatus?.tone === "pending" &&
+                            provisioningStatus.operation === "board" ? (
+                              <LoaderCircle className="animate-spin" size={15} />
+                            ) : (
+                              <Cable size={15} />
+                            )}
+                            Provision embedded board
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                   );
@@ -776,7 +792,11 @@ export function App() {
             routePoints={mode === "route" || mode === "gpx" ? routePoints : []}
           />
           <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
-            <LocationSearch center={point ?? mapCenter} onCenter={setMapCenter} />
+            <LocationSearch
+              accessToken={mapboxAccessToken}
+              center={point ?? mapCenter}
+              onCenter={setMapCenter}
+            />
             <Button onPress={locateComputer} variant="secondary">
               <LocateFixed size={16} /> Center on this Mac
             </Button>
@@ -916,8 +936,8 @@ export function App() {
               </Button>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Favorites, routes, GPX, and history are encrypted before SQLite storage. No login or
-              subscription is checked in this build.
+              Favorites, routes, GPX, and history are encrypted before SQLite storage. Enigma has no
+              account or subscription service.
             </p>
           </Surface>
         </aside>
