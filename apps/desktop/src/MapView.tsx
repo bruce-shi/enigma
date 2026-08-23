@@ -5,17 +5,7 @@ import { Protocol } from "pmtiles";
 import { useEffect, useRef } from "react";
 
 const FALLBACK_CENTER: [number, number] = [-123.1207, 49.2827];
-const FALLBACK_STYLE: maplibregl.StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#dfe7ef" },
-    },
-  ],
-};
+const DEFAULT_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const ROUTE_SOURCE = "enigma-route";
 
 export function MapView({
@@ -39,7 +29,8 @@ export function MapView({
     if (!containerRef.current || mapRef.current) return;
     const protocol = new Protocol();
     maplibregl.addProtocol("pmtiles", protocol.tile);
-    const style = import.meta.env.VITE_MAP_STYLE_URL ?? FALLBACK_STYLE;
+    const configuredStyle = import.meta.env.VITE_MAP_STYLE_URL?.trim();
+    const style = configuredStyle || DEFAULT_MAP_STYLE_URL;
     const initialCenter = center
       ? ([center.longitude, center.latitude] as [number, number])
       : FALLBACK_CENTER;
@@ -54,7 +45,6 @@ export function MapView({
     map.addControl(
       new maplibregl.AttributionControl({
         compact: true,
-        customAttribution: "© OpenStreetMap contributors",
       }),
       "bottom-right",
     );

@@ -10,9 +10,10 @@
 
 ## The device appears but is disabled
 
-Only a network device reporting iOS 27 is enabled in this build. USB, Windows, iOS
-17, iOS 18, iOS 26, and unknown versions still need qualification. Do not infer
-support from enumeration alone.
+A trusted device discovered over Wi-Fi can be selected regardless of its reported iOS
+version. USB operation remains disabled. iOS versions without a completed physical test
+are experimental, so successful enumeration does not guarantee that the location service
+is available.
 
 ## Trust or pairing failure
 

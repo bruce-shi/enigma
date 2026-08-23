@@ -33,9 +33,18 @@ bun run build
 cargo test --workspace
 ```
 
-Cloud integrations require the bindings and secrets documented in each app's
-`.env.example` or `wrangler.jsonc`. Location data must remain local to the
-device-facing desktop or embedded application.
+To enable optional Mapbox location search in the desktop app, copy the public
+environment template and add your own `pk.…` token:
+
+```sh
+cp apps/desktop/.env.example apps/desktop/.env.local
+```
+
+Edit `VITE_MAPBOX_ACCESS_TOKEN` in `.env.local`, then restart the development server.
+The token is intentionally client-visible and belongs to the person building the app;
+the repository does not include or proxy a shared Mapbox credential. Other cloud
+integrations require the bindings and secrets documented in each app's `.env.example`
+or `wrangler.jsonc`.
 
 Desktop operators should start with [`docs/desktop-setup.md`](./docs/desktop-setup.md),
 [`docs/compatibility.md`](./docs/compatibility.md), and

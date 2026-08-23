@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  CircleCheck,
   Download,
   Gamepad2,
   LoaderCircle,
@@ -32,7 +33,7 @@ import {
   RefreshCw,
   RotateCcw,
   Route as RouteIcon,
-  ShieldCheck,
+  Settings2,
   Square,
   Star,
   Trash2,
@@ -41,8 +42,11 @@ import {
   Wifi,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type DesktopRoute, desktopRouteFromHash, desktopRouteHash } from "./desktop-route";
+import { LocationSearch } from "./LocationSearch";
 import { MapView } from "./MapView";
 import { createCrashReport, submitCrashReport } from "./privacy";
+import { SettingsPage } from "./SettingsPage";
 import { desktopApi, type LocalPlanRecord, type SavedPlanKind } from "./tauri";
 import {
   checkForDesktopUpdate,
@@ -81,6 +85,9 @@ const modes: Array<{ id: EditorMode; label: string; icon: typeof MapPinPlus }> =
 ];
 
 export function App() {
+  const [route, setRoute] = useState<DesktopRoute>(() =>
+    desktopRouteFromHash(globalThis.location.hash),
+  );
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [selected, setSelected] = useState<DeviceSummary>();
   const [point, setPoint] = useState<Coordinate>();
@@ -108,6 +115,21 @@ export function App() {
   const [availableUpdate, setAvailableUpdate] = useState<DesktopUpdateInfo>();
   const [updateMessage, setUpdateMessage] = useState<string>();
   const joystickMovementRef = useRef<Promise<boolean> | undefined>(undefined);
+
+  useEffect(() => {
+    const syncRoute = () => setRoute(desktopRouteFromHash(globalThis.location.hash));
+    globalThis.addEventListener("hashchange", syncRoute);
+    return () => globalThis.removeEventListener("hashchange", syncRoute);
+  }, []);
+
+  const navigate = useCallback((next: DesktopRoute) => {
+    const hash = desktopRouteHash(next);
+    if (globalThis.location.hash === hash) {
+      setRoute(next);
+    } else {
+      globalThis.location.hash = hash;
+    }
+  }, []);
 
   const reportFailure = useCallback(
     (cause: unknown) => {
@@ -281,7 +303,7 @@ export function App() {
 
   const startCurrent = useCallback(async () => {
     if (!selected) {
-      setError("Select the validated same-LAN iPhone before starting a simulation");
+      setError("Select a ready iPhone connected over Wi-Fi before starting a simulation");
       return;
     }
     if (!currentPlan) {
@@ -536,12 +558,62 @@ export function App() {
     if (installed) setAvailableUpdate(undefined);
   };
 
+  const dialogs = (
+    <>
+      <ConfirmExitDialog
+        onCancel={() => setExitOpen(false)}
+        onKeep={() => void runAction(() => desktopApi.resolveExit("keep"))}
+        onRestore={() => void runAction(() => desktopApi.resolveExit("restore"))}
+        open={exitOpen}
+      />
+      <ConfirmExitDialog
+        cancelLabel="Not now"
+        description="Enigma detected an unfinished local session. Select the previously used iPhone and restore it before beginning another simulation. This recovery does not require login or network account access."
+        keepLabel="Keep current point"
+        onCancel={() => setRecoveryOpen(false)}
+        onKeep={() => void recover("keep")}
+        onRestore={() => void recover("restore")}
+        open={recoveryOpen}
+        restoreDisabled={!selected}
+        restoreLabel="Restore now"
+        title="Recover previous session"
+      />
+    </>
+  );
+
+  if (route === "settings") {
+    return (
+      <>
+        <SettingsPage
+          availableUpdate={availableUpdate}
+          busy={busy}
+          crashConsent={crashConsent}
+          onBack={() => navigate("workspace")}
+          onCheckForUpdates={() => void checkForUpdates()}
+          onDownloadDiagnostics={() => void downloadDiagnostics()}
+          onInstallUpdate={() => void installUpdate()}
+          onUpdateCrashConsent={(consent) => void updateCrashConsent(consent)}
+          updateBlockedReason={updateGate.allowed ? undefined : updateGate.reason}
+          updateChannel={import.meta.env.VITE_UPDATE_CHANNEL ?? "stable"}
+          updateMessage={updateMessage}
+          updaterAvailable={updaterConfigured()}
+        />
+        {dialogs}
+      </>
+    );
+  }
+
   return (
     <AppShell
       context={
         selected
           ? `${selected.name} · ${selected.transport === "network" ? "Wi-Fi beta" : "USB unqualified"}`
           : "macOS · local access"
+      }
+      navigation={
+        <Button onPress={() => navigate("settings")} variant="ghost">
+          <Settings2 size={16} /> Settings
+        </Button>
       }
       actions={
         <>
@@ -554,17 +626,29 @@ export function App() {
         </>
       }
     >
-      <div className="grid min-h-[calc(100vh-4rem)] grid-cols-1 xl:grid-cols-[22rem_1fr_22rem]">
-        <aside className="border-r border-border bg-surface-secondary/40 p-4">
-          <RoutePanel title="1. Connect iPhone">
-            <ol className="mb-4 grid gap-2 text-sm text-muted-foreground">
-              <li>1. Connect both the Lichuang board and iPhone to this Mac.</li>
-              <li>2. Unlock the iPhone, approve Trust, then provision the USB device below.</li>
-              <li>
-                3. Join the Wi-Fi shown on the board, choose Use Without Internet, then use its
-                touch screen.
-              </li>
-            </ol>
+      <div className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[20rem_minmax(0,1fr)_20rem] lg:overflow-hidden xl:grid-cols-[22rem_minmax(0,1fr)_22rem]">
+        <aside className="border-r border-border bg-surface-secondary/40 p-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
+          <RoutePanel title={selected ? "1. iPhone connected" : "1. Connect iPhone"}>
+            {selected ? (
+              <div className="mb-4 flex items-start gap-3 rounded-xl bg-success/10 p-3 text-success">
+                <CircleCheck aria-hidden className="mt-0.5 shrink-0" size={18} />
+                <div>
+                  <p className="text-sm font-semibold">Connected over Wi-Fi</p>
+                  <p className="mt-0.5 text-xs text-success/80">
+                    {selected.name} is ready. Choose a location and movement mode.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <ol className="mb-4 grid gap-2 text-sm text-muted-foreground">
+                <li>1. Connect both the Lichuang board and iPhone to this Mac.</li>
+                <li>2. Unlock the iPhone, approve Trust, then provision the USB device below.</li>
+                <li>
+                  3. Join the Wi-Fi shown on the board, choose Use Without Internet, then use its
+                  touch screen.
+                </li>
+              </ol>
+            )}
             {provisioningStatus && (
               <p
                 aria-live="polite"
@@ -594,28 +678,45 @@ export function App() {
                 {devices.map((device) => {
                   const validated =
                     device.transport === "network" && device.osVersion?.startsWith("27.");
-                  const selectable = validated && device.state === "ready";
+                  const wifiAvailable = device.transport === "network";
+                  const selectable = wifiAvailable && device.state === "ready";
+                  const connected = selected?.id === device.id;
                   return (
                     <div
-                      className={`rounded-xl border bg-surface p-3 text-left ${selected?.id === device.id ? "border-accent ring-2 ring-accent/20" : "border-border"}`}
+                      className={`rounded-xl border p-3 text-left transition-colors ${connected ? "border-success bg-success/5 ring-2 ring-success/20" : "border-border bg-surface"}`}
                       key={device.id}
                     >
                       <DeviceStatus {...device} />
-                      <p className={`mt-2 text-xs ${validated ? "text-success" : "text-warning"}`}>
-                        {validated
-                          ? `Validated same-LAN path · iOS ${device.osVersion}`
-                          : device.transport === "usb"
-                            ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · initial provisioning source`
-                            : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · not qualified in this pass`}
+                      <p
+                        className={`mt-2 text-xs ${wifiAvailable ? "text-success" : "text-warning"} ${connected ? "font-medium" : ""}`}
+                      >
+                        {connected
+                          ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · connected over Wi-Fi`
+                          : validated
+                            ? `Validated same-LAN path · iOS ${device.osVersion}`
+                            : wifiAvailable
+                              ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · Wi-Fi beta available`
+                              : device.transport === "usb"
+                                ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · initial provisioning source`
+                                : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · unavailable`}
                       </p>
-                      {selectable ? (
+                      {connected ? (
+                        <div
+                          aria-label={`${device.name} connected over Wi-Fi`}
+                          className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded-full bg-success/15 px-3 text-sm font-semibold text-success"
+                          role="status"
+                        >
+                          <CircleCheck aria-hidden size={16} /> Connected
+                        </div>
+                      ) : selectable ? (
                         <Button
                           className="mt-3 w-full"
                           isDisabled={busy}
                           onPress={() => void connect(device.id)}
                           size="sm"
                         >
-                          <Wifi size={15} /> Connect over Wi-Fi
+                          <Wifi size={15} />{" "}
+                          {selected ? "Switch to this iPhone" : "Connect over Wi-Fi"}
                         </Button>
                       ) : device.transport === "usb" && device.state === "ready" ? (
                         <Button
@@ -667,7 +768,7 @@ export function App() {
           />
         </aside>
 
-        <section className="relative min-h-[560px] bg-surface-tertiary">
+        <section className="relative min-h-[560px] bg-surface-tertiary lg:h-full lg:min-h-0 lg:overflow-hidden">
           <MapView
             center={mapCenter}
             onMapClick={onMapClick}
@@ -675,6 +776,7 @@ export function App() {
             routePoints={mode === "route" || mode === "gpx" ? routePoints : []}
           />
           <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
+            <LocationSearch center={point ?? mapCenter} onCenter={setMapCenter} />
             <Button onPress={locateComputer} variant="secondary">
               <LocateFixed size={16} /> Center on this Mac
             </Button>
@@ -696,7 +798,7 @@ export function App() {
           )}
         </section>
 
-        <aside className="border-l border-border bg-surface-secondary/40 p-4">
+        <aside className="border-l border-border bg-surface-secondary/40 p-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
           <RoutePanel title="2. Choose movement">
             <fieldset className="grid grid-cols-2 gap-2" aria-label="Movement mode">
               {modes.map(({ id, label, icon: Icon }) => (
@@ -818,98 +920,9 @@ export function App() {
               subscription is checked in this build.
             </p>
           </Surface>
-
-          <Surface className="mt-4 p-4 text-sm">
-            <p className="flex items-center gap-2 font-semibold">
-              <ShieldCheck size={16} /> Local-only access
-            </p>
-            <p className="mt-2 text-muted-foreground">
-              Account and subscription enforcement is intentionally bypassed while the desktop
-              workflow is completed.
-            </p>
-            <label className="mt-4 flex items-start gap-2 rounded-xl bg-surface-tertiary p-3">
-              <input
-                checked={crashConsent}
-                className="mt-1"
-                disabled={busy}
-                onChange={(event) => void updateCrashConsent(event.target.checked)}
-                type="checkbox"
-              />
-              <span>
-                <span className="block font-medium">Share anonymous crash reports</span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  Opt-in is stored locally. Reports exclude coordinates, device identifiers, names,
-                  tokens, and stack paths. Delivery stays off until authenticated production access
-                  is configured.
-                </span>
-              </span>
-            </label>
-            <Button className="mt-3 w-full" onPress={downloadDiagnostics} variant="secondary">
-              <Download size={16} /> Export safe diagnostics
-            </Button>
-          </Surface>
-
-          <Surface className="mt-4 p-4 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-semibold">Desktop updates</h2>
-              <span className="rounded-full bg-surface-tertiary px-2 py-1 text-xs uppercase text-muted-foreground">
-                {import.meta.env.VITE_UPDATE_CHANNEL ?? "stable"}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Enigma verifies updater signatures. Installation is blocked until every simulated
-              location is restored, even if the route worker has already stopped.
-            </p>
-            {updateMessage && <p className="mt-3 text-xs">{updateMessage}</p>}
-            {availableUpdate && !updateGate.allowed && (
-              <p className="mt-2 text-xs font-medium text-warning">{updateGate.reason}</p>
-            )}
-            <div className="mt-3 flex gap-2">
-              <Button
-                className="flex-1"
-                isDisabled={!updaterConfigured() || busy}
-                onPress={checkForUpdates}
-                variant="secondary"
-              >
-                <RefreshCw size={16} /> Check
-              </Button>
-              {availableUpdate && (
-                <Button
-                  className="flex-1"
-                  isDisabled={!updateGate.allowed || busy}
-                  onPress={installUpdate}
-                >
-                  Install {availableUpdate.version}
-                </Button>
-              )}
-            </div>
-            {!updaterConfigured() && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Disabled in this unsigned development build.
-              </p>
-            )}
-          </Surface>
         </aside>
       </div>
-
-      <ConfirmExitDialog
-        onCancel={() => setExitOpen(false)}
-        onKeep={() => void runAction(() => desktopApi.resolveExit("keep"))}
-        onRestore={() => void runAction(() => desktopApi.resolveExit("restore"))}
-        open={exitOpen}
-      />
-      <ConfirmExitDialog
-        cancelLabel="Not now"
-        description="Enigma detected an unfinished local session. Select the previously used iPhone and restore it before beginning another simulation. This recovery does not require login or network account access."
-        keepLabel="Keep current point"
-        onCancel={() => setRecoveryOpen(false)}
-        onKeep={() => void recover("keep")}
-        onRestore={() => void recover("restore")}
-        open={recoveryOpen}
-        restoreDisabled={!selected}
-        restoreLabel="Restore now"
-        title="Recover previous session"
-      />
+      {dialogs}
     </AppShell>
   );
 }

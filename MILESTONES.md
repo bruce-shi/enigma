@@ -1,6 +1,6 @@
 # Enigma Milestones
 
-Last updated: 2026-08-19
+Last updated: 2026-08-22
 Overall status: Implementation
 Current milestone: M7 — Public V1
 Next release: Desktop v1
@@ -253,10 +253,11 @@ Evidence:
 
 Status: `in_progress`
 
-Implementation: complete for the validated same-LAN desktop path; production map
-publication, production R2 retention, and physical USB fallback remain pending.
+Implementation: complete for the validated same-LAN desktop path and production
+bootstrap maps; production crash-report R2 retention and physical USB fallback
+remain pending.
 
-- [ ] Publish versioned global PMTiles, style, fonts, and sprites to R2
+- [x] Publish versioned global PMTiles, style, fonts, and sprites to R2
 - [x] Implement range-aware cached map Worker
 - [x] Add OSM attribution and dataset rollback
 - [x] Implement prior-paired same-LAN Wi-Fi discovery
@@ -274,11 +275,18 @@ Exit criteria:
 
 Evidence:
 
-- Map Worker unit tests cover byte ranges, query-string rejection, and current/versioned
-  map, style, font, and sprite rollback behavior. The dataset validator requires a
-  versioned PMTiles archive, MapLibre v8 style, OSM attribution, HTTPS-only references,
-  fonts, sprites, and emits a SHA-256 object manifest. Production R2 objects are not yet
-  published.
+- Map Worker unit tests cover byte ranges, query-string rejection, URL-encoded font
+  stacks, and current/versioned map, style, font, and sprite rollback behavior. The
+  `2026-08` production dataset publishes 774 objects: a 187,160,643-byte global
+  PMTiles archive from the 2026-08-22 Protomaps build at native zooms 0–7, a
+  71-layer MapLibre v8 style, three Noto Sans glyph sets, and light sprites. The
+  immutable style is live at
+  `https://enigma-map-gateway.bruceshi.workers.dev/styles/2026-08/style.json`.
+- Live checks returned dataset `2026-08`, a correct 127-byte `206` range with
+  `Content-Range: bytes 0-126/187160643`, and the expected Tauri/dev CORS headers.
+  Browser QA rendered the labeled map without console errors or horizontal overflow;
+  clicking the map updated the coordinate input and placed the marker. Native zooms
+  above 7 remain a full-detail dataset upgrade, not part of this bootstrap archive.
 - Prior-paired network discovery works on the local macOS host. Location-service
   compatibility is mixed between the two tested iOS versions; see M0 evidence.
 - Desktop consent is off by default and persisted locally. Payload construction drops

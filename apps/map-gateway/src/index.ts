@@ -31,24 +31,44 @@ export default {
     if (versionedMap?.[1]) {
       return serveObject(request, env, `basemap/${versionedMap[1]}/global.pmtiles`, true);
     }
-    const versionedAsset = /^\/assets\/([0-9]{4}-[0-9]{2})\/([a-zA-Z0-9_./@-]+)$/u.exec(
-      url.pathname,
-    );
-    if (versionedAsset?.[1] && versionedAsset[2] && !versionedAsset[2].includes("..")) {
+    const versionedAsset = /^\/assets\/([0-9]{4}-[0-9]{2})\/(.+)$/u.exec(url.pathname);
+    const versionedAssetPath = versionedAsset?.[2] ? decodeAssetPath(versionedAsset[2]) : undefined;
+    if (versionedAsset?.[1] && versionedAssetPath) {
       return serveObject(
         request,
         env,
-        `basemap/${versionedAsset[1]}/assets/${versionedAsset[2]}`,
+        `basemap/${versionedAsset[1]}/assets/${versionedAssetPath}`,
         true,
       );
     }
-    const asset = /^\/assets\/([a-zA-Z0-9_./@-]+)$/u.exec(url.pathname);
-    if (asset?.[1] && !asset[1].includes("..")) {
-      return serveObject(request, env, `basemap/${env.PMTILES_VERSION}/assets/${asset[1]}`, false);
+    const asset = /^\/assets\/(.+)$/u.exec(url.pathname);
+    const assetPath = asset?.[1] ? decodeAssetPath(asset[1]) : undefined;
+    if (assetPath) {
+      return serveObject(request, env, `basemap/${env.PMTILES_VERSION}/assets/${assetPath}`, false);
     }
     return withCors(request, env, new Response("Not found", { status: 404 }));
   },
 } satisfies ExportedHandler<Env>;
+
+export function decodeAssetPath(encodedPath: string): string | undefined {
+  let path: string;
+  try {
+    path = decodeURIComponent(encodedPath);
+  } catch {
+    return undefined;
+  }
+  const segments = path.split("/");
+  if (
+    !path ||
+    path.startsWith("/") ||
+    path.includes("\\") ||
+    path.includes("\0") ||
+    segments.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    return undefined;
+  }
+  return path;
+}
 
 async function serveStyle(
   request: Request,

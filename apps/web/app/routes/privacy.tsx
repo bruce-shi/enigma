@@ -5,7 +5,7 @@ export default function Privacy() {
     <SiteShell>
       <main className="mx-auto max-w-3xl px-6 py-16">
         <h1 className="text-4xl font-semibold">Privacy</h1>
-        <p className="mt-3 text-sm text-muted-foreground">Draft · updated August 19, 2026</p>
+        <p className="mt-3 text-sm text-muted-foreground">Draft · updated August 23, 2026</p>
         <div className="mt-8 grid gap-5 leading-7 text-muted-foreground">
           <p>
             Enigma stores routes, coordinates, GPX files, favorites, and location history only in
@@ -22,6 +22,11 @@ export default function Privacy() {
           <p>
             Map requests use a versioned style and PMTiles byte ranges. The map gateway rejects
             query strings, and Enigma does not append coordinates or device identifiers to map URLs.
+          </p>
+          <p>
+            Optional location search sends the typed query, current-map proximity bias, language,
+            session identifier, and the builder&apos;s public token directly to Mapbox. Enigma does
+            not cache or persist search responses, and selecting a result only centers the map.
           </p>
           <p>
             Production crash delivery remains disabled until authenticated desktop access and a

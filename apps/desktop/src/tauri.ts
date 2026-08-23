@@ -25,6 +25,32 @@ let mockSnapshot: SimulationSnapshot = { state: "idle", progress: 0, elapsedMs: 
 const mockHistory: LocalPlanRecord[] = [];
 const mockFavorites: LocalPlanRecord[] = [];
 let mockCrashReportingConsent = false;
+const browserPreviewDevices: DeviceSummary[] = [
+  {
+    id: "browser-preview",
+    name: "Browser preview iPhone",
+    model: "iPhone",
+    osVersion: "27.0",
+    transport: "network",
+    state: "ready",
+  },
+  {
+    id: "browser-preview-ios18",
+    name: "Wi-Fi beta iPhone",
+    model: "iPhone",
+    osVersion: "18.7.10",
+    transport: "network",
+    state: "ready",
+  },
+  {
+    id: "browser-preview-usb",
+    name: "Unqualified USB preview",
+    model: "iPhone",
+    osVersion: "27.0",
+    transport: "usb",
+    state: "ready",
+  },
+];
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (inTauri()) {
@@ -38,41 +64,10 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
   await new Promise((resolve) => setTimeout(resolve, 120));
   switch (command) {
     case "list_devices":
-      return [
-        {
-          id: "browser-preview",
-          name: "Browser preview iPhone",
-          model: "iPhone",
-          osVersion: "27.0",
-          transport: "network",
-          state: "ready",
-        },
-        {
-          id: "browser-preview-ios26",
-          name: "Unqualified iOS preview",
-          model: "iPhone",
-          osVersion: "26.5.2",
-          transport: "network",
-          state: "ready",
-        },
-        {
-          id: "browser-preview-usb",
-          name: "Unqualified USB preview",
-          model: "iPhone",
-          osVersion: "27.0",
-          transport: "usb",
-          state: "ready",
-        },
-      ] as T;
+      return browserPreviewDevices as T;
     case "connect_device":
-      return {
-        id: String(args?.deviceId ?? "browser-preview"),
-        name: "Browser preview iPhone",
-        model: "iPhone",
-        osVersion: "27.0",
-        transport: "network",
-        state: "ready",
-      } as T;
+      return (browserPreviewDevices.find((device) => device.id === args?.deviceId) ??
+        browserPreviewDevices[0]) as T;
     case "provision_embedded":
       return {
         boardPort: "/dev/cu.wchusbserial-preview",

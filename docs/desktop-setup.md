@@ -1,7 +1,28 @@
 # Desktop setup
 
-This build intentionally bypasses login and subscription checks. Its only enabled
-device path is a Mac on the same LAN as a previously USB-paired iPhone running iOS 27.
+This build intentionally bypasses login and subscription checks. It enables a Mac on
+the same LAN as a previously USB-paired iPhone. iOS versions without recorded physical
+evidence remain experimental.
+
+## Optional Mapbox location search
+
+Search is disabled until the person building Enigma supplies their own Mapbox public
+token. Copy the environment template:
+
+```sh
+cp apps/desktop/.env.example apps/desktop/.env.local
+```
+
+Open `apps/desktop/.env.local`, set `VITE_MAPBOX_ACCESS_TOKEN=pk.…`, and restart the
+development server or rebuild the app. `.env.local` is git-ignored. A Vite environment
+value is embedded in the client bundle, so use only a Mapbox public token—never an
+`sk.…` secret token.
+
+For development, run:
+
+```sh
+bun --filter @enigma/desktop tauri dev
+```
 
 ## Build and launch the macOS app
 
@@ -34,9 +55,10 @@ Rust host outside Tauri's frontend build context and can produce an empty window
    board** beside the USB iPhone. Keep serial monitors closed while provisioning.
 2. On the iPhone, join the SSID and password shown on the board. Choose **Use Without
    Internet** if iOS warns that the network has no internet access.
-3. Select the device labeled **Validated same-LAN path · iOS 27**. Other versions and
-   USB entries remain disabled.
-4. Click the map or enter decimal latitude and longitude.
+3. Select the Wi-Fi device. A physically qualified device is labeled **Validated
+   same-LAN path**; other versions are labeled **Wi-Fi beta available**. USB entries
+   remain disabled after provisioning.
+4. Search to center the map, then click the map or enter decimal latitude and longitude.
 5. Use **Set location**, **Route**, **Joystick**, or **GPX**.
 6. Always choose **Restore** before disconnecting the device, installing an update,
    or quitting Enigma.

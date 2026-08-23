@@ -35,8 +35,12 @@ pub struct DeviceSummary {
 }
 
 impl DeviceSummary {
-    pub fn is_validated_same_lan(&self) -> bool {
+    pub fn is_same_lan_wifi_candidate(&self) -> bool {
         self.transport == DeviceTransport::Network
+    }
+
+    pub fn is_validated_same_lan(&self) -> bool {
+        self.is_same_lan_wifi_candidate()
             && self
                 .os_version
                 .as_deref()
@@ -173,7 +177,14 @@ mod tests {
     }
 
     #[test]
-    fn enables_only_the_qualified_same_lan_path() {
+    fn accepts_network_devices_as_wifi_candidates() {
+        assert!(device(DeviceTransport::Network, Some("18.7.10")).is_same_lan_wifi_candidate());
+        assert!(device(DeviceTransport::Network, None).is_same_lan_wifi_candidate());
+        assert!(!device(DeviceTransport::Usb, Some("18.7.10")).is_same_lan_wifi_candidate());
+    }
+
+    #[test]
+    fn tracks_the_physically_validated_same_lan_path_separately() {
         assert!(device(DeviceTransport::Network, Some("27.0")).is_validated_same_lan());
         assert!(!device(DeviceTransport::Usb, Some("27.0")).is_validated_same_lan());
         assert!(!device(DeviceTransport::Network, Some("26.5.2")).is_validated_same_lan());

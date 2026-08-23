@@ -11,7 +11,7 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.enigma.example https://maps.enigma.example; img-src 'self' asset: http://asset.localhost blob: data: https://maps.enigma.example; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://maps.enigma.example; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.enigma.example https://api.mapbox.com https://maps.enigma.example https://enigma-map-gateway.bruceshi.workers.dev https://tiles.openfreemap.org; img-src 'self' asset: http://asset.localhost blob: data: https://maps.enigma.example https://enigma-map-gateway.bruceshi.workers.dev https://tiles.openfreemap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://maps.enigma.example https://enigma-map-gateway.bruceshi.workers.dev https://tiles.openfreemap.org; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'"
     },
     "windows": [
       {

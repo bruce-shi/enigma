@@ -4,11 +4,15 @@
 
 Location coordinates, GPX contents, favorites, history, route samples, Apple UDIDs,
 device names, and access tokens are prohibited from diagnostics and crash payloads.
-The desktop has only two optional network destinations:
+The desktop has three optional network destinations:
 
 - Map style and PMTiles byte-range requests. The configured style URL contains no
-  query string, and the map gateway rejects every query string. Coordinates stay in
-  MapLibre's local viewport state.
+  query string, and the self-hosted map-serving routes reject every query string.
+- User-initiated Mapbox location search. When a builder configures it, the desktop sends
+  the typed query, current-map proximity bias, language, session identifier, and that
+  builder's public Mapbox token directly to Mapbox. Enigma does not cache or persist the
+  search response. Selecting a result centers the map but does not select or persist a
+  simulation coordinate; the user must click the map to do that.
 - Authenticated crash delivery. It is off by default, requires explicit consent,
   an HTTPS `/api/crashes` endpoint, and an access token. Until account integration is
   enabled, opting in records only the local preference and performs no request.
@@ -17,6 +21,10 @@ Crash payloads contain an app version, platform, deliberately uncollected OS ver
 coarse application state, allowlisted error code, timestamp, and an empty sanitized
 frame list. Both desktop and server tests reject accidental location or identifier
 fields.
+
+Mapbox public tokens are visible in the compiled desktop client by design. Every
+builder must supply their own token and is responsible for its usage controls and
+Mapbox account. Never place a secret `sk.…` token in a `VITE_` environment variable.
 
 ## Safe diagnostics
 
@@ -27,8 +35,8 @@ error code. It never exports coordinates, device IDs, names, models, builds, or 
 errors. Review the JSON before sharing it.
 
 USB discovery may appear as a count, but USB operation remains disabled and
-unqualified. The only enabled path is macOS with a previously paired iOS 27 device on
-the same LAN.
+unqualified. Trusted same-LAN Wi-Fi devices can be selected on other iOS versions for
+experimental use; the diagnostics keep the physically qualified iOS 27 count separate.
 
 ## Crash bucket retention handoff
 

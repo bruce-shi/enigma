@@ -36,3 +36,20 @@ style is `/styles/YYYY-MM/style.json`; it pins its PMTiles, fonts, and sprites t
 same dataset version.
 
 Do not apply crash-report retention rules to the maps bucket.
+
+## Current production dataset
+
+The `2026-08` bootstrap dataset is live at
+`https://enigma-map-gateway.bruceshi.workers.dev`. It contains world coverage
+from the 2026-08-22 Protomaps build through native zoom 7; MapLibre overzooms
+those vector tiles at closer zooms. This keeps the first production publication
+small and replaceable while the full-detail planet release is prepared.
+
+- Current style: `/style.json`
+- Immutable rollback style: `/styles/2026-08/style.json`
+- Archive: 187,160,643 bytes
+- Published objects: 774
+- Worker version: `4a383980-63fb-42bf-ac04-09af015c6ad5`
+
+The source, extraction bounds, versions, and checksums are recorded in
+`release/2026-08.json`.

@@ -276,9 +276,9 @@ impl DeviceAdapter for DeviceRuntime {
         if descriptor.summary.state == DeviceState::NeedsTrust {
             return Err("unlock the iPhone and approve Trust This Computer".into());
         }
-        if !descriptor.summary.is_validated_same_lan() {
+        if !descriptor.summary.is_same_lan_wifi_candidate() {
             return Err(
-                "this build only enables the qualified macOS + iOS 27 same-LAN path; USB and other iOS versions remain deferred"
+                "connect to the iPhone over the same Wi-Fi network; USB operation remains deferred"
                     .into(),
             );
         }
