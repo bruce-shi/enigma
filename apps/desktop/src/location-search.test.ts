@@ -3,7 +3,9 @@ import {
   mapboxSearchConfigured,
   parseLocationSuggestions,
   parseRetrievedCoordinate,
+  shouldSuggestLocations,
   suggestLocations,
+  zoomForLocationSuggestion,
 } from "./location-search";
 
 afterEach(() => {
@@ -79,5 +81,18 @@ describe("Mapbox search responses", () => {
     expect(mapboxSearchConfigured("pk.")).toBe(false);
     expect(mapboxSearchConfigured("sk.secret-token")).toBe(false);
     expect(mapboxSearchConfigured("pk.user-owned-public-token")).toBe(true);
+  });
+
+  it("does not immediately search again after selecting a result", () => {
+    expect(shouldSuggestLocations("Stanley Park", "Stanley Park")).toBe(false);
+    expect(shouldSuggestLocations("Stanley Park V", "Stanley Park")).toBe(true);
+    expect(shouldSuggestLocations("ab")).toBe(false);
+  });
+
+  it("uses building detail for addresses while keeping broad results in context", () => {
+    expect(zoomForLocationSuggestion("address")).toBe(18);
+    expect(zoomForLocationSuggestion("poi")).toBe(17);
+    expect(zoomForLocationSuggestion("place")).toBe(12);
+    expect(zoomForLocationSuggestion("region")).toBe(6);
   });
 });

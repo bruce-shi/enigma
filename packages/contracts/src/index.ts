@@ -41,6 +41,7 @@ type DeviceDiagnosticCode =
   | "UNKNOWN";
 
 type SpeedProfile = "constant" | "natural";
+export type RoutingProfile = "driving" | "walking" | "cycling";
 
 export interface RouteOptions {
   speedKph: number;
@@ -61,6 +62,8 @@ export interface PathPlan {
   points: Coordinate[];
   options: RouteOptions;
   honorTimestamps?: boolean;
+  waypoints?: Coordinate[];
+  routingProfile?: RoutingProfile;
 }
 
 interface JoystickPlan {

@@ -39,7 +39,11 @@ export function SettingsPage({
   const saveMapboxToken = async () => {
     const token = mapboxTokenDraft.trim();
     const saved = await onSaveMapboxAccessToken(token || undefined);
-    if (saved) setMapboxMessage(token ? "Mapbox search is enabled." : "Mapbox token removed.");
+    if (saved) {
+      setMapboxMessage(
+        token ? "Mapbox maps, search, and routing are enabled." : "Mapbox token removed.",
+      );
+    }
   };
 
   return (
@@ -57,7 +61,7 @@ export function SettingsPage({
             <p className="text-xs font-semibold uppercase tracking-wide text-accent">Desktop</p>
             <h1 className="mt-1 text-2xl font-semibold">Settings</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Manage local map search, diagnostics, and application updates.
+              Manage Mapbox access, diagnostics, and application updates.
             </p>
           </div>
 
@@ -70,7 +74,7 @@ export function SettingsPage({
             <Surface className="p-5 text-sm md:p-6">
               <div className="flex items-center justify-between gap-3">
                 <p className="flex items-center gap-2 text-base font-semibold">
-                  <ShieldCheck size={18} /> No account required
+                  <ShieldCheck size={18} /> Local data
                 </p>
                 <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-semibold text-success">
                   Local
@@ -78,7 +82,7 @@ export function SettingsPage({
               </div>
               <p className="mt-3 text-muted-foreground">
                 Enigma stores routes, favorites, history, and recovery state only on this computer.
-                It has no Enigma account, subscription, or crash-reporting service.
+                Diagnostic files are created only when you choose to export them.
               </p>
               <Button className="mt-4 w-full" onPress={onDownloadDiagnostics} variant="secondary">
                 <Download size={16} /> Export safe diagnostics
@@ -88,16 +92,16 @@ export function SettingsPage({
             <Surface className="p-5 text-sm md:p-6">
               <div className="flex items-center justify-between gap-3">
                 <p className="flex items-center gap-2 text-base font-semibold">
-                  <KeyRound size={18} /> Optional Mapbox search
+                  <KeyRound size={18} /> Mapbox maps and routing
                 </p>
                 <span className="rounded-full bg-surface-tertiary px-2.5 py-1 text-xs font-semibold text-muted-foreground">
                   {mapboxAccessToken ? "Configured" : "Off"}
                 </span>
               </div>
               <p className="mt-3 text-muted-foreground">
-                OpenFreeMap works without a token. To search for addresses and places, supply your
-                own client-visible Mapbox public token beginning with <code>pk.</code>. Search
-                requests go directly to Mapbox.
+                Supply a client-visible Mapbox public token beginning with <code>pk.</code> to load
+                Mapbox Streets, search for places, and calculate driving, walking, or cycling
+                routes. Requests go directly to Mapbox.
               </p>
               <label className="mt-4 block">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">

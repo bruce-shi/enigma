@@ -12,15 +12,18 @@ Close serial monitors, connect the Lichuang board and iPhone by USB, keep the iP
 unlocked, and approve the modern Apple pairing prompt. On macOS, verify the CH340K
 driver and set `ENIGMA_BOARD_PORT` only when multiple physical boards are attached.
 
-## The map loads but search is disabled
+## The map or search is disabled
 
 Open Settings and save your own Mapbox public `pk.` token. Secret `sk.` tokens are
-rejected. Manual map selection and coordinate entry do not require Mapbox.
+rejected. The same token enables Mapbox Streets, place search, and route calculation.
+Manual coordinate entry and local GPX playback do not require Mapbox.
 
-## OpenFreeMap or Mapbox is unavailable
+## The map has no labels or a route cannot be calculated
 
-Third-party map failures do not affect device Restore. Use decimal coordinates or a
-local GPX file, and retry the provider later.
+Confirm that the token is active and allowed to use the Mapbox Styles, Tiles, Search,
+and Directions APIs. Token URL restrictions that exclude the Tauri desktop webview can
+also block requests. Third-party map failures do not affect device Restore; use decimal
+coordinates or a local GPX file and retry Mapbox later.
 
 ## Enigma reports an unfinished session
 

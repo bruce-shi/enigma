@@ -10,6 +10,7 @@ the desktop app, then add the compact ESP32-S3 controller if it fits your workfl
 - An iPhone you are authorized to test
 - A USB cable for the initial Apple pairing
 - A normal Wi-Fi network shared by the Mac and iPhone
+- A Mapbox account and public `pk.` token for the street map, place search, and routing
 - Optional: the supported Lichuang ESP32-S3 board for standalone control
 
 Check [compatibility](compatibility.md) for the currently qualified iOS and transport
@@ -23,10 +24,11 @@ combinations before relying on Enigma for a test plan.
    Mode if the iOS build requires it.
 3. Open Enigma, scan devices, and enable desktop Wi-Fi on the USB device entry.
 4. Put the Mac and iPhone on the same LAN, disconnect USB, then scan and connect again.
-5. Pick a point and test **Set** followed by **Restore** before running a route.
+5. Add a Mapbox public token in **Settings**, pick a point, and test **Set** followed by
+   **Restore** before running a route.
 
-The [desktop setup guide](desktop-setup.md) covers Mapbox search, local route storage,
-and recovery behavior in more detail.
+The [desktop setup guide](desktop-setup.md) covers Mapbox maps, place search, road
+routing, local route storage, and recovery behavior in more detail.
 
 ## Add the embedded controller
 

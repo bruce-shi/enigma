@@ -2,6 +2,7 @@ import type {
   Coordinate,
   DeviceSummary,
   RouteOptions,
+  RoutingProfile,
   SimulationPlan,
   SimulationSnapshot,
 } from "@enigma/contracts";
@@ -45,6 +46,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type DesktopRoute, desktopRouteFromHash, desktopRouteHash } from "./desktop-route";
 import { LocationSearch } from "./LocationSearch";
 import { MapView } from "./MapView";
+import { mapboxAccessTokenConfigured } from "./mapbox-access-token";
+import { MAX_MAPBOX_WAYPOINTS, requestMapboxRoute } from "./mapbox-directions";
 import { SettingsPage } from "./SettingsPage";
 import { desktopApi, type LocalPlanRecord, type SavedPlanKind } from "./tauri";
 import {
@@ -65,6 +68,7 @@ import {
 } from "./workflows";
 
 type EditorMode = "teleport" | "route" | "joystick" | "gpx";
+type SidebarTab = "devices" | "library";
 type ProvisioningStatus = {
   tone: "pending" | "success" | "error";
   message: string;
@@ -90,9 +94,15 @@ export function App() {
   );
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [selected, setSelected] = useState<DeviceSummary>();
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("devices");
   const [point, setPoint] = useState<Coordinate>();
-  const [mapCenter, setMapCenter] = useState<Coordinate>();
+  const [mapCenter, setMapCenter] = useState<Coordinate & { zoom?: number }>();
   const [routePoints, setRoutePoints] = useState<Coordinate[]>([]);
+  const [routeWaypoints, setRouteWaypoints] = useState<Coordinate[]>([]);
+  const [routingProfile, setRoutingProfile] = useState<RoutingProfile>("driving");
+  const [routingLoading, setRoutingLoading] = useState(false);
+  const [routingError, setRoutingError] = useState<string>();
+  const [mapError, setMapError] = useState<string>();
   const [mode, setMode] = useState<EditorMode>("teleport");
   const [activeMode, setActiveMode] = useState<EditorMode>();
   const [speedKph, setSpeedKph] = useState(5);
@@ -193,6 +203,44 @@ export function App() {
   }, [refreshDevices, refreshLibrary]);
 
   useEffect(() => {
+    if (mode !== "route") {
+      setRoutingLoading(false);
+      setRoutingError(undefined);
+      return;
+    }
+    setRoutePoints(routeWaypoints);
+    setRoutingError(undefined);
+    if (routeWaypoints.length < 2) {
+      setRoutingLoading(false);
+      return;
+    }
+    if (!mapboxAccessTokenConfigured(mapboxAccessToken)) {
+      setRoutingLoading(false);
+      setRoutingError("Add a Mapbox public token in Settings to calculate road routes");
+      return;
+    }
+    const controller = new AbortController();
+    setRoutingLoading(true);
+    void requestMapboxRoute({
+      waypoints: routeWaypoints,
+      profile: routingProfile,
+      accessToken: mapboxAccessToken,
+      signal: controller.signal,
+    })
+      .then((points) => {
+        if (!controller.signal.aborted) setRoutePoints(points);
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setRoutingError(errorMessage(cause));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRoutingLoading(false);
+      });
+    return () => controller.abort();
+  }, [mapboxAccessToken, mode, routeWaypoints, routingProfile]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       void desktopApi
         .getSimulationSnapshot()
@@ -236,9 +284,29 @@ export function App() {
     if (mode === "joystick") {
       return point ? { kind: "joystick", origin: point, speedKph, headingDegrees: 0 } : null;
     }
+    if (mode === "route") {
+      if (routePoints.length < 2 || routingLoading || routingError) return null;
+      return {
+        kind: "path",
+        points: routePoints,
+        waypoints: routeWaypoints,
+        routingProfile,
+        options,
+      };
+    }
     if (routePoints.length < 2) return null;
-    return { kind: mode === "gpx" ? "gpx" : "path", points: routePoints, options };
-  }, [mode, options, point, routePoints, speedKph]);
+    return { kind: "gpx", points: routePoints, options };
+  }, [
+    mode,
+    options,
+    point,
+    routePoints,
+    routeWaypoints,
+    routingError,
+    routingLoading,
+    routingProfile,
+    speedKph,
+  ]);
 
   const metrics = useMemo(
     () =>
@@ -445,6 +513,12 @@ export function App() {
     const nextPoints = planPoints(record.plan);
     setPoint(nextPoints[0]);
     setRoutePoints(record.plan.kind === "path" || record.plan.kind === "gpx" ? nextPoints : []);
+    setRouteWaypoints(
+      record.plan.kind === "path" ? (record.plan.waypoints ?? routeEndpoints(nextPoints)) : [],
+    );
+    if (record.plan.kind === "path") {
+      setRoutingProfile(record.plan.routingProfile ?? "driving");
+    }
     setMode(
       record.plan.kind === "path" ? "route" : record.plan.kind === "gpx" ? "gpx" : record.plan.kind,
     );
@@ -481,6 +555,7 @@ export function App() {
       setError(undefined);
       const points = parseGpx(await file.text());
       setRoutePoints(points);
+      setRouteWaypoints([]);
       setPoint(points[0]);
       setMapCenter(points[0]);
       setGpxName(file.name.replace(/\.gpx$/iu, ""));
@@ -520,7 +595,11 @@ export function App() {
 
   const onMapClick = (next: Coordinate) => {
     if (mode === "route") {
-      setRoutePoints((current) => [...current, next]);
+      if (routeWaypoints.length >= MAX_MAPBOX_WAYPOINTS) {
+        setRoutingError(`Mapbox routes support up to ${MAX_MAPBOX_WAYPOINTS} waypoints`);
+        return;
+      }
+      setRouteWaypoints((current) => [...current, next]);
       setPoint(next);
       return;
     }
@@ -624,7 +703,7 @@ export function App() {
       actions={
         <>
           <span className="hidden rounded-full bg-success/15 px-3 py-1 text-xs font-semibold text-success md:inline-flex">
-            No account required
+            Local control
           </span>
           <Button isDisabled={busy} onPress={refreshDevices} variant="ghost">
             <RefreshCw size={16} /> Refresh
@@ -634,130 +713,189 @@ export function App() {
     >
       <div className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[20rem_minmax(0,1fr)_20rem] lg:overflow-hidden xl:grid-cols-[22rem_minmax(0,1fr)_22rem]">
         <aside className="border-r border-border bg-surface-secondary/40 p-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
-          <RoutePanel title={selected ? "1. iPhone connected" : "1. Connect iPhone"}>
-            {selected ? (
-              <div className="mb-4 flex items-start gap-3 rounded-xl bg-success/10 p-3 text-success">
-                <CircleCheck aria-hidden className="mt-0.5 shrink-0" size={18} />
-                <div>
-                  <p className="text-sm font-semibold">Connected over Wi-Fi</p>
-                  <p className="mt-0.5 text-xs text-success/80">
-                    {selected.name} is ready. Choose a location and movement mode.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <ol className="mb-4 grid gap-2 text-sm text-muted-foreground">
-                <li>1. Connect and unlock the iPhone by USB, then approve Apple Trust.</li>
-                <li>2. Enable desktop Wi-Fi, provision the embedded board, or do both.</li>
-                <li>3. For desktop use, reconnect with this Mac and iPhone on the same network.</li>
-              </ol>
-            )}
-            {provisioningStatus && (
-              <p
-                aria-live="polite"
-                className={`mb-3 rounded-xl p-3 text-xs font-medium ${
-                  provisioningStatus.tone === "success"
-                    ? "bg-success/15 text-success"
-                    : provisioningStatus.tone === "error"
-                      ? "bg-danger/15 text-danger"
-                      : "bg-accent/15 text-accent"
-                }`}
-              >
-                {provisioningStatus.message}
-              </p>
-            )}
-            {devices.length === 0 ? (
-              <EmptyState
-                title="No iPhone found"
-                description="Connect and unlock the iPhone by USB for first-time local pairing. No Enigma account or cloud service is required."
-                action={
-                  <Button onPress={refreshDevices}>
-                    <Wifi size={16} /> Scan devices
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="grid gap-2">
-                {devices.map((device) => {
-                  const validated =
-                    device.transport === "network" && device.osVersion?.startsWith("27.");
-                  const wifiAvailable = device.transport === "network";
-                  const selectable = wifiAvailable && device.state === "ready";
-                  const connected = selected?.id === device.id;
-                  return (
-                    <div
-                      className={`rounded-xl border p-3 text-left transition-colors ${connected ? "border-success bg-success/5 ring-2 ring-success/20" : "border-border bg-surface"}`}
-                      key={device.id}
-                    >
-                      <DeviceStatus {...device} />
-                      <p
-                        className={`mt-2 text-xs ${wifiAvailable ? "text-success" : "text-warning"} ${connected ? "font-medium" : ""}`}
-                      >
-                        {connected
-                          ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · connected over Wi-Fi`
-                          : validated
-                            ? `Validated same-LAN path · iOS ${device.osVersion}`
-                            : wifiAvailable
-                              ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · Wi-Fi beta available`
-                              : device.transport === "usb"
-                                ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · initial provisioning source`
-                                : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · unavailable`}
+          <div
+            aria-label="Device and library sections"
+            className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1 shadow-sm"
+            role="tablist"
+          >
+            <button
+              aria-controls="sidebar-devices-panel"
+              aria-selected={sidebarTab === "devices"}
+              className={`flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                sidebarTab === "devices"
+                  ? "bg-accent text-accent-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-surface-tertiary hover:text-foreground"
+              }`}
+              id="sidebar-devices-tab"
+              onClick={() => setSidebarTab("devices")}
+              role="tab"
+              tabIndex={sidebarTab === "devices" ? 0 : -1}
+              type="button"
+            >
+              <Wifi aria-hidden size={15} /> Devices
+              {devices.length > 0 && (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                    sidebarTab === "devices" ? "bg-white/20" : "bg-surface-tertiary"
+                  }`}
+                >
+                  {devices.length}
+                </span>
+              )}
+            </button>
+            <button
+              aria-controls="sidebar-library-panel"
+              aria-selected={sidebarTab === "library"}
+              className={`flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                sidebarTab === "library"
+                  ? "bg-accent text-accent-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-surface-tertiary hover:text-foreground"
+              }`}
+              id="sidebar-library-tab"
+              onClick={() => setSidebarTab("library")}
+              role="tab"
+              tabIndex={sidebarTab === "library" ? 0 : -1}
+              type="button"
+            >
+              <Star aria-hidden size={15} /> Library
+            </button>
+          </div>
+
+          {sidebarTab === "devices" && (
+            <div
+              aria-labelledby="sidebar-devices-tab"
+              className="mt-4"
+              id="sidebar-devices-panel"
+              role="tabpanel"
+            >
+              <RoutePanel title={selected ? "1. iPhone connected" : "1. Connect iPhone"}>
+                {selected ? (
+                  <div className="mb-4 flex items-start gap-3 rounded-xl bg-success/10 p-3 text-success">
+                    <CircleCheck aria-hidden className="mt-0.5 shrink-0" size={18} />
+                    <div>
+                      <p className="text-sm font-semibold">Connected over Wi-Fi</p>
+                      <p className="mt-0.5 text-xs text-success/80">
+                        {selected.name} is ready. Choose a location and movement mode.
                       </p>
-                      {connected ? (
-                        <div
-                          aria-label={`${device.name} connected over Wi-Fi`}
-                          className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded-full bg-success/15 px-3 text-sm font-semibold text-success"
-                          role="status"
-                        >
-                          <CircleCheck aria-hidden size={16} /> Connected
-                        </div>
-                      ) : selectable ? (
-                        <Button
-                          className="mt-3 w-full"
-                          isDisabled={busy}
-                          onPress={() => void connect(device.id)}
-                          size="sm"
-                        >
-                          <Wifi size={15} />{" "}
-                          {selected ? "Switch to this iPhone" : "Connect over Wi-Fi"}
-                        </Button>
-                      ) : device.transport === "usb" && device.state === "ready" ? (
-                        <div className="mt-3 grid gap-2">
-                          <Button
-                            isDisabled={busy}
-                            onPress={() => void enableDesktopWifi(device.id)}
-                            size="sm"
-                          >
-                            {provisioningStatus?.tone === "pending" &&
-                            provisioningStatus.operation === "desktop" ? (
-                              <LoaderCircle className="animate-spin" size={15} />
-                            ) : (
-                              <Wifi size={15} />
-                            )}
-                            Enable desktop Wi-Fi
-                          </Button>
-                          <Button
-                            isDisabled={busy}
-                            onPress={() => void provisionBoard(device.id)}
-                            size="sm"
-                            variant="secondary"
-                          >
-                            {provisioningStatus?.tone === "pending" &&
-                            provisioningStatus.operation === "board" ? (
-                              <LoaderCircle className="animate-spin" size={15} />
-                            ) : (
-                              <Cable size={15} />
-                            )}
-                            Provision embedded board
-                          </Button>
-                        </div>
-                      ) : null}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </RoutePanel>
+                  </div>
+                ) : (
+                  <ol className="mb-4 grid gap-2 text-sm text-muted-foreground">
+                    <li>1. Connect and unlock the iPhone by USB, then approve Apple Trust.</li>
+                    <li>2. Enable desktop Wi-Fi, provision the embedded board, or do both.</li>
+                    <li>
+                      3. For desktop use, reconnect with this Mac and iPhone on the same network.
+                    </li>
+                  </ol>
+                )}
+                {provisioningStatus && (
+                  <p
+                    aria-live="polite"
+                    className={`mb-3 rounded-xl p-3 text-xs font-medium ${
+                      provisioningStatus.tone === "success"
+                        ? "bg-success/15 text-success"
+                        : provisioningStatus.tone === "error"
+                          ? "bg-danger/15 text-danger"
+                          : "bg-accent/15 text-accent"
+                    }`}
+                  >
+                    {provisioningStatus.message}
+                  </p>
+                )}
+                {devices.length === 0 ? (
+                  <EmptyState
+                    title="No iPhone found"
+                    description="Connect and unlock the iPhone by USB for first-time local pairing. Pairing stays between this Mac and iPhone."
+                    action={
+                      <Button onPress={refreshDevices}>
+                        <Wifi size={16} /> Scan devices
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <div className="grid gap-2">
+                    {devices.map((device) => {
+                      const validated =
+                        device.transport === "network" && device.osVersion?.startsWith("27.");
+                      const wifiAvailable = device.transport === "network";
+                      const selectable = wifiAvailable && device.state === "ready";
+                      const connected = selected?.id === device.id;
+                      return (
+                        <div
+                          className={`rounded-xl border p-3 text-left transition-colors ${connected ? "border-success bg-success/5 ring-2 ring-success/20" : "border-border bg-surface"}`}
+                          key={device.id}
+                        >
+                          <DeviceStatus {...device} />
+                          <p
+                            className={`mt-2 text-xs ${wifiAvailable ? "text-success" : "text-warning"} ${connected ? "font-medium" : ""}`}
+                          >
+                            {connected
+                              ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · connected over Wi-Fi`
+                              : validated
+                                ? `Validated same-LAN path · iOS ${device.osVersion}`
+                                : wifiAvailable
+                                  ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · Wi-Fi beta available`
+                                  : device.transport === "usb"
+                                    ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · initial provisioning source`
+                                    : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · unavailable`}
+                          </p>
+                          {connected ? (
+                            <div
+                              aria-label={`${device.name} connected over Wi-Fi`}
+                              className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded-full bg-success/15 px-3 text-sm font-semibold text-success"
+                              role="status"
+                            >
+                              <CircleCheck aria-hidden size={16} /> Connected
+                            </div>
+                          ) : selectable ? (
+                            <Button
+                              className="mt-3 w-full"
+                              isDisabled={busy}
+                              onPress={() => void connect(device.id)}
+                              size="sm"
+                            >
+                              <Wifi size={15} />{" "}
+                              {selected ? "Switch to this iPhone" : "Connect over Wi-Fi"}
+                            </Button>
+                          ) : device.transport === "usb" && device.state === "ready" ? (
+                            <div className="mt-3 grid gap-2">
+                              <Button
+                                isDisabled={busy}
+                                onPress={() => void enableDesktopWifi(device.id)}
+                                size="sm"
+                              >
+                                {provisioningStatus?.tone === "pending" &&
+                                provisioningStatus.operation === "desktop" ? (
+                                  <LoaderCircle className="animate-spin" size={15} />
+                                ) : (
+                                  <Wifi size={15} />
+                                )}
+                                Enable desktop Wi-Fi
+                              </Button>
+                              <Button
+                                isDisabled={busy}
+                                onPress={() => void provisionBoard(device.id)}
+                                size="sm"
+                                variant="secondary"
+                              >
+                                {provisioningStatus?.tone === "pending" &&
+                                provisioningStatus.operation === "board" ? (
+                                  <LoaderCircle className="animate-spin" size={15} />
+                                ) : (
+                                  <Cable size={15} />
+                                )}
+                                Provision embedded board
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </RoutePanel>
+            </div>
+          )}
 
           {dirtySession && (
             <Surface className="mt-4 border-warning/50 p-4 text-sm">
@@ -776,34 +914,41 @@ export function App() {
             </Surface>
           )}
 
-          <LocalLibrary
-            favorites={favorites}
-            history={history}
-            onDelete={deleteSaved}
-            onLoad={loadPlan}
-          />
+          {sidebarTab === "library" && (
+            <div aria-labelledby="sidebar-library-tab" id="sidebar-library-panel" role="tabpanel">
+              <LocalLibrary
+                favorites={favorites}
+                history={history}
+                onDelete={deleteSaved}
+                onLoad={loadPlan}
+              />
+            </div>
+          )}
         </aside>
 
         <section className="relative min-h-[560px] bg-surface-tertiary lg:h-full lg:min-h-0 lg:overflow-hidden">
           <MapView
+            accessToken={mapboxAccessToken}
             center={mapCenter}
             onMapClick={onMapClick}
+            onMapError={setMapError}
             point={point}
             routePoints={mode === "route" || mode === "gpx" ? routePoints : []}
+            waypoints={mode === "route" ? routeWaypoints : []}
           />
           <div className="absolute left-4 top-4 z-10 flex flex-wrap gap-2">
             <LocationSearch
               accessToken={mapboxAccessToken}
               center={point ?? mapCenter}
-              onCenter={setMapCenter}
+              onCenter={(coordinate, zoom) => setMapCenter({ ...coordinate, zoom })}
             />
             <Button onPress={locateComputer} variant="secondary">
               <LocateFixed size={16} /> Center on this Mac
             </Button>
-            {mode === "route" && routePoints.length > 0 && (
+            {mode === "route" && routeWaypoints.length > 0 && (
               <Button
                 onPress={() => {
-                  setRoutePoints((current) => current.slice(0, -1));
+                  setRouteWaypoints((current) => current.slice(0, -1));
                 }}
                 variant="secondary"
               >
@@ -811,9 +956,9 @@ export function App() {
               </Button>
             )}
           </div>
-          {error && (
+          {(error ?? routingError ?? mapError) && (
             <div className="absolute bottom-4 left-4 right-4 z-10 rounded-xl border border-danger/40 bg-danger/90 p-3 text-sm text-white shadow-lg">
-              {error}
+              {error ?? routingError ?? mapError}
             </div>
           )}
         </section>
@@ -837,10 +982,13 @@ export function App() {
               {mode === "teleport" && <CoordinateEditor point={point} setPoint={setPoint} />}
               {mode === "route" && (
                 <RouteEditor
-                  options={{ repetitions, roundTrip, speedKph, speedProfile }}
-                  pointCount={routePoints.length}
+                  options={{ repetitions, roundTrip, routingProfile, speedKph, speedProfile }}
+                  pointCount={routeWaypoints.length}
+                  routingError={routingError}
+                  routingLoading={routingLoading}
                   setRepetitions={setRepetitions}
                   setRoundTrip={setRoundTrip}
+                  setRoutingProfile={setRoutingProfile}
                   setSpeedKph={setSpeedKph}
                   setSpeedProfile={setSpeedProfile}
                 />
@@ -936,8 +1084,7 @@ export function App() {
               </Button>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Favorites, routes, GPX, and history are encrypted before SQLite storage. Enigma has no
-              account or subscription service.
+              Favorites, routes, GPX, and history are encrypted before SQLite storage on this Mac.
             </p>
           </Surface>
         </aside>
@@ -993,10 +1140,13 @@ function CoordinateEditor({
 function RouteEditor({
   pointCount,
   options,
+  routingError,
+  routingLoading,
   setSpeedKph,
   setSpeedProfile,
   setRepetitions,
   setRoundTrip,
+  setRoutingProfile,
 }: {
   pointCount: number;
   options: {
@@ -1004,17 +1154,38 @@ function RouteEditor({
     speedProfile: "constant" | "natural";
     repetitions: number;
     roundTrip: boolean;
+    routingProfile: RoutingProfile;
   };
+  routingError?: string;
+  routingLoading: boolean;
   setSpeedKph: (value: number) => void;
   setSpeedProfile: (value: "constant" | "natural") => void;
   setRepetitions: (value: number) => void;
   setRoundTrip: (value: boolean) => void;
+  setRoutingProfile: (value: RoutingProfile) => void;
 }) {
   return (
     <div className="grid gap-4">
       <p className="rounded-xl bg-accent/10 p-3 text-sm text-accent">
-        Click the map to add route points. {pointCount} selected.
+        Click the map to add up to {MAX_MAPBOX_WAYPOINTS} waypoints. {pointCount} selected.
       </p>
+      <FormField label="Mapbox road routing">
+        <select
+          className="rounded-lg border border-border bg-surface px-3 py-2"
+          onChange={(event) => setRoutingProfile(event.target.value as RoutingProfile)}
+          value={options.routingProfile}
+        >
+          <option value="driving">Driving</option>
+          <option value="walking">Walking</option>
+          <option value="cycling">Cycling</option>
+        </select>
+      </FormField>
+      {routingLoading && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <LoaderCircle className="animate-spin" size={14} /> Calculating road route…
+        </p>
+      )}
+      {routingError && <p className="text-xs text-danger">{routingError}</p>}
       <MovementOptions
         repetitions={options.repetitions}
         roundTrip={options.roundTrip}
@@ -1333,6 +1504,12 @@ function safeFileName(value: string): string {
       .replace(/[^a-z0-9._-]+/giu, "-")
       .replace(/^-+|-+$/gu, "") || "enigma-route"
   );
+}
+
+function routeEndpoints(points: Coordinate[]): Coordinate[] {
+  const first = points[0];
+  const last = points.at(-1);
+  return first && last ? [first, last] : [];
 }
 
 function downloadTextFile(contents: string, fileName: string, type: string): void {

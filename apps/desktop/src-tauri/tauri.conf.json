@@ -11,7 +11,7 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.mapbox.com https://tiles.openfreemap.org; img-src 'self' asset: http://asset.localhost blob: data: https://tiles.openfreemap.org; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://tiles.openfreemap.org; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://api.mapbox.com; img-src 'self' asset: http://asset.localhost blob: data: https://api.mapbox.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'"
     },
     "windows": [
       {

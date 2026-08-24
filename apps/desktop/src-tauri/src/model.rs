@@ -89,6 +89,14 @@ pub enum SpeedProfile {
     Natural,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RoutingProfile {
+    Driving,
+    Walking,
+    Cycling,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum SimulationPlan {
@@ -98,13 +106,17 @@ pub enum SimulationPlan {
     Path {
         points: Vec<Coordinate>,
         options: RouteOptions,
-        #[serde(default)]
+        #[serde(default, rename = "honorTimestamps", alias = "honor_timestamps")]
         honor_timestamps: bool,
+        #[serde(default)]
+        waypoints: Option<Vec<Coordinate>>,
+        #[serde(default, rename = "routingProfile", alias = "routing_profile")]
+        routing_profile: Option<RoutingProfile>,
     },
     Gpx {
         points: Vec<Coordinate>,
         options: RouteOptions,
-        #[serde(default)]
+        #[serde(default, rename = "honorTimestamps", alias = "honor_timestamps")]
         honor_timestamps: bool,
     },
     Joystick {
@@ -189,5 +201,34 @@ mod tests {
         assert!(!device(DeviceTransport::Usb, Some("27.0")).is_validated_same_lan());
         assert!(!device(DeviceTransport::Network, Some("26.5.2")).is_validated_same_lan());
         assert!(!device(DeviceTransport::Network, None).is_validated_same_lan());
+    }
+
+    #[test]
+    fn preserves_mapbox_route_metadata_in_saved_plans() {
+        let value = serde_json::json!({
+            "kind": "path",
+            "points": [
+                { "latitude": 49.2827, "longitude": -123.1207 },
+                { "latitude": 49.3043, "longitude": -123.1443 }
+            ],
+            "waypoints": [
+                { "latitude": 49.2827, "longitude": -123.1207 },
+                { "latitude": 49.3043, "longitude": -123.1443 }
+            ],
+            "routingProfile": "walking",
+            "options": {
+                "speedKph": 5.0,
+                "speedProfile": "constant",
+                "repetitions": 1,
+                "roundTrip": false,
+                "updateIntervalMs": 1000,
+                "naturalVariationSeed": null
+            }
+        });
+        let plan: SimulationPlan = serde_json::from_value(value).unwrap();
+        let serialized = serde_json::to_value(plan).unwrap();
+
+        assert_eq!(serialized["routingProfile"], "walking");
+        assert_eq!(serialized["waypoints"].as_array().unwrap().len(), 2);
     }
 }

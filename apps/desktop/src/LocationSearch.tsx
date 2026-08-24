@@ -5,7 +5,9 @@ import {
   type LocationSuggestion,
   mapboxSearchConfigured,
   retrieveLocation,
+  shouldSuggestLocations,
   suggestLocations,
+  zoomForLocationSuggestion,
 } from "./location-search";
 
 const VANCOUVER: Coordinate = { latitude: 49.2827, longitude: -123.1207 };
@@ -17,7 +19,7 @@ export function LocationSearch({
 }: {
   accessToken?: string;
   center?: Coordinate;
-  onCenter: (coordinate: Coordinate) => void;
+  onCenter: (coordinate: Coordinate, zoom: number) => void;
 }) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
@@ -26,13 +28,19 @@ export function LocationSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const sessionToken = useRef(createSessionToken());
+  const selectedQuery = useRef<string | undefined>(undefined);
   const language = globalThis.navigator.language.split("-")[0] || "en";
   const configured = mapboxSearchConfigured(accessToken);
 
   useEffect(() => {
-    if (!configured) return;
+    if (!configured) {
+      setSuggestions([]);
+      setLoading(false);
+      setError(undefined);
+      return;
+    }
     const trimmed = query.trim();
-    if (trimmed.length < 3) {
+    if (!shouldSuggestLocations(query, selectedQuery.current)) {
       setSuggestions([]);
       setLoading(false);
       setError(undefined);
@@ -74,6 +82,7 @@ export function LocationSearch({
   const choose = async (suggestion: LocationSuggestion) => {
     setLoading(true);
     setError(undefined);
+    setOpen(false);
     try {
       const coordinate = await retrieveLocation({
         id: suggestion.id,
@@ -81,9 +90,11 @@ export function LocationSearch({
         sessionToken: sessionToken.current,
         language,
       });
+      selectedQuery.current = suggestion.name.trim();
       setQuery(suggestion.name);
+      setSuggestions([]);
       setOpen(false);
-      onCenter(coordinate);
+      onCenter(coordinate, zoomForLocationSuggestion(suggestion.featureType));
       sessionToken.current = createSessionToken();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Location search failed");
@@ -93,16 +104,16 @@ export function LocationSearch({
     }
   };
 
-  const showResults = configured && open && query.trim().length >= 3;
+  const showResults = configured && open && shouldSuggestLocations(query, selectedQuery.current);
 
   return (
     <search
-      className="relative w-[min(22rem,calc(100vw-2rem))]"
+      className="enigma-location-search relative w-[min(22rem,calc(100vw-2rem))]"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
     >
-      <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 shadow-lg">
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 shadow-lg transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20">
         <Search aria-hidden="true" className="text-muted-foreground" size={17} />
         <input
           aria-autocomplete="list"
@@ -113,11 +124,12 @@ export function LocationSearch({
           disabled={!configured}
           maxLength={256}
           onChange={(event) => {
+            selectedQuery.current = undefined;
             setQuery(event.currentTarget.value);
             setOpen(true);
           }}
           onFocus={() => {
-            if (query.trim().length >= 3) setOpen(true);
+            if (shouldSuggestLocations(query, selectedQuery.current)) setOpen(true);
           }}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -160,6 +172,7 @@ export function LocationSearch({
               }`}
               key={suggestion.id}
               onClick={() => void choose(suggestion)}
+              onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActiveIndex(index)}
               role="option"
               type="button"
@@ -177,7 +190,7 @@ export function LocationSearch({
           )}
           {error && <p className="px-3 py-3 text-sm text-danger">{error}</p>}
           <p className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-            Search by Mapbox · select to center, then click the map
+            Search by Mapbox · select to zoom in, then click the map
           </p>
         </div>
       )}

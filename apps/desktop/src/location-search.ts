@@ -1,4 +1,5 @@
 import type { Coordinate } from "@enigma/contracts";
+import { mapboxAccessTokenConfigured, requiredMapboxAccessToken } from "./mapbox-access-token";
 
 const MAPBOX_SEARCH_ORIGIN = "https://api.mapbox.com";
 
@@ -10,7 +11,37 @@ export type LocationSuggestion = {
 };
 
 export function mapboxSearchConfigured(accessToken?: string): boolean {
-  return validMapboxAccessToken(accessToken);
+  return mapboxAccessTokenConfigured(accessToken);
+}
+
+export function shouldSuggestLocations(query: string, selectedQuery?: string): boolean {
+  const trimmed = query.trim();
+  return trimmed.length >= 3 && trimmed !== selectedQuery;
+}
+
+export function zoomForLocationSuggestion(featureType?: string): number {
+  switch (featureType?.toLowerCase()) {
+    case "address":
+      return 18;
+    case "poi":
+      return 17;
+    case "street":
+      return 15;
+    case "neighborhood":
+      return 14;
+    case "locality":
+    case "place":
+      return 12;
+    case "district":
+    case "postcode":
+      return 10;
+    case "region":
+      return 6;
+    case "country":
+      return 4;
+    default:
+      return 16;
+  }
 }
 
 export async function suggestLocations({
@@ -104,21 +135,6 @@ export function parseRetrievedCoordinate(payload: unknown): Coordinate {
     throw new Error("The selected location did not include valid coordinates");
   }
   return { latitude, longitude };
-}
-
-function validMapboxAccessToken(accessToken?: string): accessToken is string {
-  const token = accessToken?.trim();
-  return Boolean(
-    token && token.length > 3 && token.length <= 2_048 && /^pk\.[\w.-]+$/u.test(token),
-  );
-}
-
-function requiredMapboxAccessToken(accessToken?: string): string {
-  const token = accessToken?.trim();
-  if (!validMapboxAccessToken(token)) {
-    throw new Error("Add a Mapbox public token in Settings");
-  }
-  return token;
 }
 
 async function requestJson(url: URL, signal?: AbortSignal): Promise<unknown> {

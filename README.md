@@ -30,10 +30,10 @@ Apple Trust, Developer Mode, and pairing approvals remain mandatory.
 - `packages/route-engine` — deterministic WGS84 movement engine.
 - `packages/ui` — shared HeroUI theme and components.
 
-The desktop loads its basemap directly from OpenFreeMap. Optional place search goes
-directly to Mapbox with a public `pk.` token saved in desktop Settings. Manual
-coordinates, GPX playback, device Restore, and the embedded workflow do not depend on
-Mapbox.
+The desktop keeps MapLibre as its open-source renderer and loads Mapbox Streets data,
+place search, and driving, walking, or cycling directions directly from Mapbox. Add a
+client-visible Mapbox public `pk.` token in desktop Settings. Manual coordinates, GPX
+playback, device Restore, and the embedded workflow do not depend on Mapbox.
 
 ## Install and validate the workspace
 

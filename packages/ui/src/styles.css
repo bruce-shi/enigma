@@ -96,6 +96,10 @@ body {
   filter: none;
 }
 
+.enigma-location-search input:focus-visible {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

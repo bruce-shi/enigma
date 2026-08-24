@@ -34,7 +34,7 @@ const movementModes = [
   {
     icon: Route,
     title: "Build a route",
-    body: "Add multiple waypoints, choose a speed, and preview distance and travel time before starting.",
+    body: "Place multiple waypoints, follow roads or paths by driving, walking, or cycling, and preview the journey before starting.",
   },
   {
     icon: Gamepad2,

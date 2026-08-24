@@ -25,12 +25,19 @@ After provisioning, join the board SSID from the iPhone and follow the
 [embedded setup guide](embedded-setup.md).
 The board then works independently of the desktop and internet.
 
-## Optional Mapbox search
+## Mapbox maps, search, and routing
 
 Open **Settings**, paste a client-visible Mapbox public token beginning with `pk.`, and
-save it. The token is stored in the desktop's local SQLite settings. Search queries and
-proximity coordinates go directly to Mapbox; Enigma does not proxy or retain them.
-OpenFreeMap and manual coordinate entry work without a token.
+save it. The token is stored in the desktop's local SQLite settings. Enigma uses
+MapLibre to render Mapbox Streets, then calls Mapbox Search and Directions for place
+results and routes that follow roads and paths. Choose driving, walking, or cycling in
+Route mode.
+
+Map style and tile requests, search queries, proximity coordinates, selected route
+waypoints, and the routing profile go directly to Mapbox; Enigma does not proxy or
+retain those requests. Mapbox usage is subject to the quota and billing rules of the
+account that owns the token. Manual coordinate entry, local GPX playback, and device
+Restore remain available without Mapbox.
 
 ## Local data and recovery
 

@@ -8,7 +8,7 @@ describe("standalone desktop network boundary", () => {
     );
     const csp = String(configuration.app.security.csp);
     expect(csp).toContain("https://api.mapbox.com");
-    expect(csp).toContain("https://tiles.openfreemap.org");
+    expect(csp).not.toContain("openfreemap.org");
     expect(csp).not.toMatch(/api\.enigma|maps\.enigma|map-gateway|r2|pmtiles/u);
   });
 

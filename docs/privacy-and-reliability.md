@@ -6,9 +6,13 @@ database, or object store.
 
 ## Network boundaries
 
-- MapLibre requests the public OpenFreeMap style, tiles, fonts, and sprites directly.
-- Optional Mapbox Search sends the typed query, proximity coordinates, language,
-  session identifier, and user-supplied public token directly to Mapbox.
+- MapLibre renders the interactive map and route overlays locally. It requests Mapbox
+  Streets raster tiles directly from Mapbox with the user-supplied public token.
+- Mapbox Search receives the typed query, proximity coordinates, language, session
+  identifier, and public token.
+- Mapbox Directions receives selected waypoints, the driving, walking, or cycling
+  profile, and the public token. The returned route geometry is stored locally only
+  when the user saves or runs that route.
 - Signed release builds check a static updater manifest and download artifacts from
   GitHub Releases. Development builds do not contact the updater.
 - The landing page is rendered by a Cloudflare Worker with no application bindings,
@@ -24,5 +28,5 @@ Safe diagnostics omit coordinates, routes, names, UDIDs, models, iOS builds, pai
 records, Mapbox tokens, raw errors, and filesystem stack paths. Diagnostics are saved
 only when the user explicitly exports the file.
 
-Restore and exit protection never depend on the map, Mapbox, GitHub, or Cloudflare. A
+Restore and exit protection never depend on MapLibre, Mapbox, GitHub, or Cloudflare. A
 failed third-party request cannot block Restore.

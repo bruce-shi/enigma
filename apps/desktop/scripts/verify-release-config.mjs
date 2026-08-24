@@ -45,6 +45,10 @@ for (const directive of ["object-src 'none'", "frame-src 'none'", "base-uri 'non
   if (!csp.includes(directive)) errors.push(`CSP is missing ${directive}`);
 }
 if (csp.includes("*")) errors.push("CSP must not contain wildcard sources");
+for (const mapboxOrigin of ["https://api.mapbox.com"]) {
+  if (!csp.includes(mapboxOrigin)) errors.push(`CSP is missing Mapbox origin ${mapboxOrigin}`);
+}
+if (csp.includes("openfreemap.org")) errors.push("CSP still contains the retired OpenFreeMap host");
 for (const forbidden of ["api.enigma", "maps.enigma", "enigma-map-gateway", "pmtiles"]) {
   if (csp.includes(forbidden)) errors.push(`CSP still contains hosted service ${forbidden}`);
 }
