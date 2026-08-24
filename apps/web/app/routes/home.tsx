@@ -1,127 +1,337 @@
 import {
+  Activity,
   ArrowRight,
   Cable,
   Code2,
   Download,
-  KeyRound,
-  LockKeyhole,
-  MapPinned,
+  Gamepad2,
+  Gauge,
+  History,
+  MapPinPlus,
   MonitorCheck,
+  Pause,
+  Play,
+  Repeat2,
+  RotateCcw,
+  Route,
+  Smartphone,
+  Star,
+  Upload,
   Wifi,
 } from "lucide-react";
 import { ButtonLink, SiteShell } from "../components/SiteShell";
 
 const repository = "https://github.com/bruce-shi/enigma";
 
-const features = [
+const movementModes = [
   {
-    icon: MapPinned,
-    title: "Map, routes, and joystick",
-    body: "Teleport, replay GPX, or simulate deterministic movement from the desktop map.",
+    icon: MapPinPlus,
+    title: "Teleport",
+    body: "Pick a point on the map or enter exact coordinates, then move the connected iPhone there.",
   },
   {
-    icon: MonitorCheck,
-    title: "Desktop or embedded",
-    body: "Control a paired iPhone from the desktop, or provision the ESP32-S3 board for independent use.",
+    icon: Route,
+    title: "Build a route",
+    body: "Add multiple waypoints, choose a speed, and preview distance and travel time before starting.",
   },
   {
-    icon: Wifi,
-    title: "Local device transport",
-    body: "Pair once over USB, then use the supported same-LAN desktop path or the board-owned Wi-Fi network.",
+    icon: Gamepad2,
+    title: "Steer with a joystick",
+    body: "Guide movement in any direction and adjust your heading while the simulation is running.",
   },
   {
-    icon: LockKeyhole,
-    title: "No Enigma account",
-    body: "Routes, coordinates, favorites, history, and recovery state stay on your computer.",
+    icon: Upload,
+    title: "Replay GPX",
+    body: "Import an existing GPX track, inspect it on the map, and run the same journey again.",
+  },
+];
+
+const routeTools = [
+  {
+    icon: Gauge,
+    title: "Set the pace",
+    body: "Tune movement from walking speed through driving speed, with constant or natural variation.",
+  },
+  {
+    icon: Repeat2,
+    title: "Repeat or return",
+    body: "Run a route multiple times or turn it into a round trip with a single setting.",
+  },
+  {
+    icon: Pause,
+    title: "Stay in control",
+    body: "Pause, resume, restart, or stop a simulation whenever your test needs a different turn.",
+  },
+  {
+    icon: Star,
+    title: "Keep useful routes",
+    body: "Save favorites and revisit recent sessions instead of rebuilding the same test path.",
   },
 ];
 
 export default function Home() {
   return (
     <SiteShell>
-      <section className="overflow-hidden px-6 py-24 md:py-32">
-        <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[1.05fr_.95fr]">
+      <section className="overflow-hidden px-6 py-20 md:py-28">
+        <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[.88fr_1.12fr]">
           <div>
             <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-accent">
-              GPL-3.0 open source
+              iPhone location simulation
             </p>
             <h1 className="max-w-3xl text-5xl font-semibold tracking-tight md:text-7xl">
-              Test an iPhone location without an account or Enigma cloud.
+              Put your test route in motion.
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Enigma is a local-first desktop and embedded utility for developers, QA teams, and
-              controlled location workflows. Maps come directly from OpenFreeMap, with optional
-              user-configured Mapbox place search.
+            <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
+              Choose a point, draw a path, import a GPX track, or steer in real time. Enigma gives
+              you precise control of a paired iPhone from one focused map workspace.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <ButtonLink className="gap-2" size="lg" to={repository}>
-                <Code2 size={18} /> View source <ArrowRight size={17} />
+              <ButtonLink className="gap-2" size="lg" to={`${repository}/releases`}>
+                <Download size={18} /> Download Enigma <ArrowRight size={17} />
               </ButtonLink>
-              <ButtonLink
-                className="gap-2"
-                size="lg"
-                to={`${repository}/releases`}
-                variant="secondary"
-              >
-                <Download size={18} /> GitHub Releases
+              <ButtonLink className="gap-2" size="lg" to="/docs" variant="secondary">
+                <Code2 size={18} /> Read the docs
               </ButtonLink>
             </div>
+            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <MonitorCheck className="text-accent" size={17} /> macOS desktop
+              </span>
+              <span className="flex items-center gap-2">
+                <Wifi className="text-accent" size={17} /> Same-LAN control
+              </span>
+              <span className="flex items-center gap-2">
+                <Cable className="text-accent" size={17} /> ESP32-S3 workflow
+              </span>
+            </div>
           </div>
-          <div className="enigma-surface grid aspect-[4/3] place-items-center bg-surface-secondary p-6">
-            <div className="relative size-full overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_30%_35%,var(--accent)_0_2px,transparent_3px),linear-gradient(135deg,var(--surface-tertiary),var(--surface))]">
-              <div className="absolute left-[28%] top-[32%] size-5 rounded-full border-4 border-accent bg-surface shadow-lg" />
-              <div className="absolute bottom-5 left-5 right-5 rounded-xl border border-border bg-surface/90 p-4 backdrop-blur">
-                <p className="font-medium">No Enigma-hosted runtime services</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Local device control · encrypted local library · direct map providers
+
+          <div
+            aria-hidden
+            className="enigma-surface overflow-hidden bg-surface-secondary shadow-2xl"
+          >
+            <div className="flex items-center gap-2 border-b border-border bg-surface px-4 py-3">
+              <span className="size-2.5 rounded-full bg-danger/70" />
+              <span className="size-2.5 rounded-full bg-warning" />
+              <span className="size-2.5 rounded-full bg-success/80" />
+              <span className="ml-2 text-xs font-medium text-muted-foreground">Enigma · Route</span>
+              <span className="ml-auto flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
+                <Smartphone size={12} /> iPhone connected
+              </span>
+            </div>
+            <div className="grid min-h-[430px] md:grid-cols-[1.45fr_.8fr]">
+              <div className="relative min-h-72 overflow-hidden border-b border-border bg-[linear-gradient(35deg,transparent_48%,color-mix(in_oklab,var(--border)_55%,transparent)_49%,color-mix(in_oklab,var(--border)_55%,transparent)_51%,transparent_52%),linear-gradient(-35deg,transparent_48%,color-mix(in_oklab,var(--border)_40%,transparent)_49%,color-mix(in_oklab,var(--border)_40%,transparent)_51%,transparent_52%),linear-gradient(var(--surface-secondary),var(--surface-tertiary))] bg-[length:88px_88px,120px_120px,auto] md:border-b-0 md:border-r">
+                <svg
+                  className="absolute inset-0 size-full"
+                  fill="none"
+                  preserveAspectRatio="none"
+                  viewBox="0 0 500 430"
+                >
+                  <title>Illustrated route from point A to point B</title>
+                  <path
+                    d="M70 330C115 304 119 238 174 228C232 218 245 282 306 260C366 238 351 151 427 105"
+                    stroke="color-mix(in oklab, var(--accent) 22%, transparent)"
+                    strokeLinecap="round"
+                    strokeWidth="13"
+                  />
+                  <path
+                    d="M70 330C115 304 119 238 174 228C232 218 245 282 306 260C366 238 351 151 427 105"
+                    stroke="var(--accent)"
+                    strokeDasharray="8 10"
+                    strokeLinecap="round"
+                    strokeWidth="4"
+                  />
+                </svg>
+                <span className="absolute bottom-[19%] left-[11%] grid size-8 place-items-center rounded-full border-4 border-surface bg-accent text-xs font-bold text-accent-foreground shadow-lg">
+                  A
+                </span>
+                <span className="absolute right-[9%] top-[18%] grid size-8 place-items-center rounded-full border-4 border-surface bg-foreground text-xs font-bold text-background shadow-lg">
+                  B
+                </span>
+                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-xl border border-border bg-surface/90 px-4 py-3 shadow-lg backdrop-blur">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Current location</p>
+                    <p className="mt-0.5 text-sm font-semibold">Route in progress</p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-medium text-accent">
+                    <Activity size={15} /> Moving
+                  </div>
+                </div>
+              </div>
+              <div className="bg-surface p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Movement mode
                 </p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <span className="rounded-lg border border-border px-2.5 py-2 text-center">
+                    Teleport
+                  </span>
+                  <span className="rounded-lg bg-accent px-2.5 py-2 text-center font-medium text-accent-foreground">
+                    Route
+                  </span>
+                  <span className="rounded-lg border border-border px-2.5 py-2 text-center">
+                    Joystick
+                  </span>
+                  <span className="rounded-lg border border-border px-2.5 py-2 text-center">
+                    GPX
+                  </span>
+                </div>
+                <div className="mt-5 space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Speed</span>
+                      <span className="font-medium">5.0 km/h</span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full w-[42%] rounded-full bg-accent" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between border-y border-border py-3 text-xs">
+                    <span className="text-muted-foreground">Motion</span>
+                    <span className="font-medium">Natural</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-surface-secondary p-3 text-center">
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Distance</p>
+                      <p className="mt-1 text-sm font-semibold">4.2 km</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Est. time</p>
+                      <p className="mt-1 text-sm font-semibold">50 min</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 rounded-xl bg-accent px-3 py-2.5 text-xs font-semibold text-accent-foreground">
+                    <Play fill="currentColor" size={13} /> Start route
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="border-t border-border bg-surface-secondary/35 px-6 py-20" id="features">
-        <div className="mx-auto grid max-w-6xl gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {features.map(({ icon: Icon, title, body }) => (
-            <article className="enigma-surface p-5" key={title}>
-              <Icon className="text-accent" size={22} />
-              <h2 className="mt-4 font-semibold">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p>
-            </article>
-          ))}
+      <section className="border-y border-border bg-surface-secondary/35 px-6 py-20" id="features">
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
+              Four ways to move
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold md:text-4xl">
+              Choose the control that fits the test.
+            </h2>
+            <p className="mt-4 leading-7 text-muted-foreground">
+              Start with a single coordinate or build a repeatable journey. Every mode stays in the
+              same map workspace, so switching approaches does not interrupt your flow.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {movementModes.map(({ icon: Icon, title, body }) => (
+              <article className="enigma-surface p-5" key={title}>
+                <span className="grid size-10 place-items-center rounded-xl bg-accent/10 text-accent">
+                  <Icon size={21} />
+                </span>
+                <h3 className="mt-4 font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="px-6 py-20" id="setup">
-        <div className="mx-auto max-w-6xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
-            Two local workflows
-          </p>
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            <article className="enigma-surface p-6">
-              <MonitorCheck className="text-accent" size={24} />
-              <h2 className="mt-4 text-xl font-semibold">Desktop standalone</h2>
-              <ol className="mt-4 grid gap-2 text-sm leading-6 text-muted-foreground">
-                <li>1. Connect and unlock the iPhone by USB and approve Apple Trust.</li>
-                <li>2. Enable desktop Wi-Fi from Enigma, then put both devices on the same LAN.</li>
-                <li>3. Disconnect USB, scan again, and connect to the Wi-Fi device.</li>
-              </ol>
-            </article>
-            <article className="enigma-surface p-6">
-              <Cable className="text-accent" size={24} />
-              <h2 className="mt-4 text-xl font-semibold">Embedded standalone</h2>
-              <ol className="mt-4 grid gap-2 text-sm leading-6 text-muted-foreground">
-                <li>1. Flash the supported ESP32-S3 board and pair the iPhone on the desktop.</li>
-                <li>2. Provision the pairing bundle locally over the board serial connection.</li>
-                <li>3. Join the board Wi-Fi from the iPhone and use its touch controls.</li>
-              </ol>
-            </article>
+      <section className="px-6 py-20">
+        <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[.82fr_1.18fr] lg:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
+              Route controls
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold md:text-4xl">
+              Shape the movement, not just the destination.
+            </h2>
+            <p className="mt-5 leading-7 text-muted-foreground">
+              Enigma turns a line on the map into a controllable test session. Adjust pace and
+              repetition before you start, then react while it is running.
+            </p>
           </div>
-          <p className="mt-5 text-sm text-muted-foreground">
-            Apple Trust, Developer Mode, and modern pairing approvals remain mandatory and cannot be
-            bypassed.
-          </p>
+          <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
+            {routeTools.map(({ icon: Icon, title, body }) => (
+              <article className="flex gap-4" key={title}>
+                <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-surface-tertiary text-accent">
+                  <Icon size={19} />
+                </span>
+                <div>
+                  <h3 className="font-semibold">{title}</h3>
+                  <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-border bg-surface-secondary/35 px-6 py-20" id="setup">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
+              From map to iPhone
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold md:text-4xl">
+              Start moving in three steps.
+            </h2>
+          </div>
+          <ol className="mt-12 grid gap-5 md:grid-cols-3">
+            <li className="enigma-surface p-6">
+              <span className="text-sm font-semibold text-accent">01</span>
+              <Smartphone className="mt-5 text-accent" size={24} />
+              <h3 className="mt-4 text-lg font-semibold">Pair your iPhone</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Connect once by USB, unlock the device, and approve Apple Trust and Developer Mode.
+              </p>
+            </li>
+            <li className="enigma-surface p-6">
+              <span className="text-sm font-semibold text-accent">02</span>
+              <Route className="mt-5 text-accent" size={24} />
+              <h3 className="mt-4 text-lg font-semibold">Choose how to move</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Drop a point, draw a route, load a GPX file, or switch to joystick control.
+              </p>
+            </li>
+            <li className="enigma-surface p-6">
+              <span className="text-sm font-semibold text-accent">03</span>
+              <Play className="mt-5 text-accent" size={24} />
+              <h3 className="mt-4 text-lg font-semibold">Run the session</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Start the simulation, make adjustments as you test, and restore the device when
+                done.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section className="px-6 py-20">
+        <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-2">
+          <article className="enigma-surface p-7">
+            <MonitorCheck className="text-accent" size={26} />
+            <p className="mt-6 text-sm font-semibold uppercase tracking-[0.16em] text-accent">
+              Desktop workflow
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold">Plan and control from the Mac.</h2>
+            <p className="mt-4 leading-7 text-muted-foreground">
+              Work from the full map, route editor, favorites, and history. After pairing, connect
+              to a previously trusted iPhone over the same local network.
+            </p>
+          </article>
+          <article className="enigma-surface p-7">
+            <Cable className="text-accent" size={26} />
+            <p className="mt-6 text-sm font-semibold uppercase tracking-[0.16em] text-accent">
+              Embedded workflow
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold">Take the controls with the board.</h2>
+            <p className="mt-4 leading-7 text-muted-foreground">
+              Provision a supported ESP32-S3 display from the desktop, then use its own Wi-Fi
+              network and touch interface for a compact standalone setup.
+            </p>
+          </article>
         </div>
       </section>
 
@@ -129,65 +339,66 @@ export default function Home() {
         className="border-y border-border bg-surface-secondary/35 px-6 py-20"
         id="compatibility"
       >
-        <div className="mx-auto max-w-6xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
-            Compatibility
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold md:text-4xl">Evidence before claims</h2>
-          <p className="mt-5 max-w-3xl leading-7 text-muted-foreground">
-            The currently validated desktop path is macOS 12+ with a previously paired iOS 27 device
-            over same-LAN Wi-Fi. USB runtime control, Windows, and other iOS versions remain
-            unqualified until their physical test matrices pass. The Lichuang ESP32-S3 display and
-            touch path is verified; full Wi-Fi/iPhone acceptance remains in progress.
-          </p>
-          <ButtonLink
-            className="mt-6"
-            to={`${repository}/blob/main/docs/compatibility.md`}
-            variant="secondary"
-          >
-            Read compatibility evidence
+        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
+              Compatibility
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold md:text-4xl">Know the tested path.</h2>
+            <p className="mt-5 max-w-3xl leading-7 text-muted-foreground">
+              The currently validated desktop path is macOS 12+ with a previously paired iOS 27
+              device over same-LAN Wi-Fi. The Lichuang ESP32-S3 display and touch path is verified;
+              full board-to-iPhone acceptance is still in progress.
+            </p>
+          </div>
+          <ButtonLink to="/docs/compatibility" variant="secondary">
+            View compatibility details
           </ButtonLink>
         </div>
       </section>
 
-      <section className="px-6 py-20" id="privacy">
+      <section className="px-6 py-20">
         <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-3">
           <article className="enigma-surface p-6 md:col-span-2">
-            <LockKeyhole className="text-accent" size={24} />
-            <h2 className="mt-4 text-xl font-semibold">Local data and direct providers</h2>
+            <History className="text-accent" size={24} />
+            <h2 className="mt-4 text-xl font-semibold">A route library built for repeat testing</h2>
             <p className="mt-3 leading-7 text-muted-foreground">
-              Enigma has no account, billing, entitlement, analytics, or crash-upload backend.
-              Location libraries remain encrypted locally. OpenFreeMap receives normal map tile
-              requests. If you configure Mapbox search, typed queries, proximity coordinates,
-              language, a session identifier, and your public token go directly to Mapbox.
+              Routes, coordinates, favorites, history, and recovery state stay together on your
+              computer. The library is encrypted locally so your recurring test paths are ready for
+              the next session.
             </p>
           </article>
           <article className="enigma-surface p-6">
-            <KeyRound className="text-accent" size={24} />
-            <h2 className="mt-4 text-xl font-semibold">Bring your own search token</h2>
+            <RotateCcw className="text-accent" size={24} />
+            <h2 className="mt-4 text-xl font-semibold">Recover unfinished sessions</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The map works without credentials. Optional Mapbox search accepts only a
-              client-visible public token beginning with <code>pk.</code>, stored on the local
-              computer.
+              If a run is interrupted, Enigma detects the unfinished session and guides you back to
+              a clean device state before another simulation begins.
             </p>
           </article>
         </div>
       </section>
 
-      <section className="border-t border-border bg-surface-secondary/35 px-6 py-20">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="text-3xl font-semibold">Authorized testing only</h2>
-          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Use Enigma only with devices, applications, and services you are authorized to test. It
-            does not guarantee compatibility, account safety, or compliance with third-party terms.
-            Review the source, build it yourself, and contribute under GPL-3.0-only.
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <ButtonLink to={`${repository}/blob/main/README.md`}>Build from source</ButtonLink>
-            <ButtonLink to={`${repository}/blob/main/CONTRIBUTING.md`} variant="secondary">
-              Contribute
-            </ButtonLink>
+      <section className="border-t border-border bg-foreground px-6 py-20 text-background">
+        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-background/65">
+              Ready to map a route?
+            </p>
+            <h2 className="mt-3 max-w-2xl text-3xl font-semibold md:text-4xl">
+              Bring repeatable location testing to your iPhone.
+            </h2>
+            <p className="mt-4 max-w-2xl leading-7 text-background/70">
+              Use Enigma only with devices, applications, and services you are authorized to test.
+            </p>
           </div>
+          <ButtonLink
+            className="shrink-0 gap-2 bg-background text-foreground hover:bg-background/90"
+            size="lg"
+            to={`${repository}/releases`}
+          >
+            <Download size={18} /> Get Enigma
+          </ButtonLink>
         </div>
       </section>
     </SiteShell>

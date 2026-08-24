@@ -1,7 +1,8 @@
-# Privacy and reliability
+# Privacy
 
-Enigma has no account, billing, entitlement, analytics, API, crash-upload, database,
-or object-storage service.
+Enigma is designed around direct device control and local desktop storage. The product
+does not run a hosted application API, analytics pipeline, crash-upload service, user
+database, or object store.
 
 ## Network boundaries
 
@@ -23,5 +24,5 @@ Safe diagnostics omit coordinates, routes, names, UDIDs, models, iOS builds, pai
 records, Mapbox tokens, raw errors, and filesystem stack paths. Diagnostics are saved
 only when the user explicitly exports the file.
 
-Restore and exit protection never depend on the map, Mapbox, GitHub, Cloudflare, or
-any account service. A failed third-party request cannot block Restore.
+Restore and exit protection never depend on the map, Mapbox, GitHub, or Cloudflare. A
+failed third-party request cannot block Restore.

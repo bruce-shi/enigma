@@ -25,17 +25,23 @@ export function ButtonLink({
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell
-      context="Open-source location testing"
+      context="iPhone location simulation"
       navigation={
         <>
-          <ButtonLink to="#features" variant="ghost">
+          <ButtonLink className="hidden sm:inline-flex" to="/#features" variant="ghost">
             Features
           </ButtonLink>
-          <ButtonLink to="#compatibility" variant="ghost">
+          <ButtonLink className="hidden sm:inline-flex" to="/#setup" variant="ghost">
+            How it works
+          </ButtonLink>
+          <ButtonLink className="hidden md:inline-flex" to="/#compatibility" variant="ghost">
             Compatibility
           </ButtonLink>
-          <ButtonLink to="https://github.com/bruce-shi/enigma" variant="ghost">
-            GitHub
+          <ButtonLink to="/docs" variant="ghost">
+            Docs
+          </ButtonLink>
+          <ButtonLink to="https://github.com/bruce-shi/enigma/releases" variant="ghost">
+            Download
           </ButtonLink>
         </>
       }
@@ -44,8 +50,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
       {children}
       <footer className="border-t border-border px-6 py-8 text-sm text-muted-foreground">
         <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-4">
-          <span>Enigma is open source under GPL-3.0-only.</span>
-          <a href="https://github.com/bruce-shi/enigma/blob/main/LICENSE">License</a>
+          <span>Enigma · Precise iPhone location simulation.</span>
+          <div className="flex gap-5">
+            <a href="/docs">Docs</a>
+            <a href="/docs/desktop-setup">Setup guide</a>
+            <a href="https://github.com/bruce-shi/enigma">GitHub</a>
+          </div>
         </div>
       </footer>
     </AppShell>

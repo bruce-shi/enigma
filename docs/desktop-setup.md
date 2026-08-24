@@ -1,8 +1,7 @@
 # Desktop setup
 
-The desktop app works without an Enigma account or embedded board. Initial Apple
-pairing is local and still requires an unlocked iPhone, Trust approval, and Developer
-Mode where required by the iOS build.
+Enigma controls a paired iPhone from its map workspace. Initial Apple pairing requires
+an unlocked iPhone, Trust approval, and Developer Mode where required by the iOS build.
 
 ## Desktop-only Wi-Fi setup
 
@@ -12,8 +11,8 @@ Mode where required by the iOS build.
 4. Disconnect USB, scan again, and connect to the Wi-Fi device entry.
 5. Select a map point and test Set/Restore before using routes or joystick movement.
 
-The current qualified path is macOS 12+ with the exact iOS 27 build recorded in the
-physical test matrix. Other visible devices remain unqualified until tested.
+Review [compatibility](compatibility.md) before setup; visible devices outside the
+qualified path may connect but are not yet supported.
 
 ## Optional embedded-board provisioning
 
@@ -22,7 +21,8 @@ choose **Provision embedded board** on the USB iPhone entry. Keep the phone unlo
 approve Apple's modern pairing prompt, and close serial monitors that own the CH340K
 port. The desktop transfers the pairing bundle directly to the board over serial.
 
-After provisioning, join the board SSID from the iPhone and follow the embedded guide.
+After provisioning, join the board SSID from the iPhone and follow the
+[embedded setup guide](embedded-setup.md).
 The board then works independently of the desktop and internet.
 
 ## Optional Mapbox search
@@ -37,3 +37,6 @@ OpenFreeMap and manual coordinate entry work without a token.
 Favorites, history, GPX-derived plans, and routes are encrypted in the local vault.
 Every simulated session sets a durable recovery marker. Restore the real location
 before exiting or installing an update.
+
+Continue with [troubleshooting](troubleshooting.md) if the iPhone, board, map, or updater
+does not behave as expected.

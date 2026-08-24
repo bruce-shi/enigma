@@ -1,6 +1,6 @@
 {
   "name": "enigma",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "GPL-3.0-only",
   "private": true,
   "packageManager": "bun@1.3.9",
@@ -13,11 +13,12 @@
     "dev": "turbo run dev --parallel",
     "lint": "biome check .",
     "test": "turbo run test",
-    "test:run": "turbo run test:run",
+    "test:run": "node --test scripts/*.test.mjs && turbo run test:run",
     "desktop": "bun --filter @enigma/desktop",
     "web": "bun --filter @enigma/web",
-    "release:check": "bun --filter @enigma/desktop release:check",
-    "release:check:production": "bun --filter @enigma/desktop release:check:production"
+    "release:version": "node scripts/verify-release-version.mjs",
+    "release:check": "bun run release:version && bun --filter @enigma/desktop release:check",
+    "release:check:production": "bun run release:version && bun --filter @enigma/desktop release:check:production"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.9",

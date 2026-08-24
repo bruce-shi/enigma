@@ -1,0 +1,114 @@
+name: Package builds
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-builds-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Desktop (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+            artifact: enigma-desktop-macos-apple-silicon
+            bundle: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          - os: macos-15
+            target: x86_64-apple-darwin
+            artifact: enigma-desktop-macos-intel
+            bundle: target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            artifact: enigma-desktop-windows-x64
+            bundle: target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+    runs-on: ${{ matrix.os }}
+    env:
+      VITE_UPDATER_READY: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.94.0
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: package-${{ matrix.target }}
+      - run: bun install --frozen-lockfile
+      - run: bun run release:version
+      - name: Build unsigned desktop bundle
+        run: bun --filter @enigma/desktop tauri build --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.bundle }}
+          if-no-files-found: error
+          retention-days: 14
+
+  firmware:
+    name: Firmware (Lichuang ESP32-S3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.94.0
+      - name: Install espflash
+        run: cargo +1.94.0 install espflash --version 4.5.0 --locked
+      - uses: esp-rs/xtensa-toolchain@v1.6
+        with:
+          version: "1.95.0.0"
+          buildtargets: esp32s3
+          default: false
+          ldproxy: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: package-esp32s3
+          workspaces: |
+            . -> target
+            apps/embedded/platforms/esp-idf -> target
+      - run: bun install --frozen-lockfile
+      - run: bun run release:version
+      - name: Build ESP-IDF firmware
+        run: cargo +1.94.0 run -p enigma-embedded --release -- --build-only
+      - name: Package and validate firmware bundle
+        shell: bash
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          tag="v${version}"
+          output="$RUNNER_TEMP/enigma-firmware"
+          node apps/embedded/scripts/package-firmware-release.mjs \
+            --version "$version" \
+            --tag "$tag" \
+            --commit "$GITHUB_SHA" \
+            --output-dir "$output"
+          archive="$output/enigma-firmware-lichuang-esp32s3-${tag}.zip"
+          node apps/embedded/scripts/validate-firmware-release.mjs \
+            "$archive" "$archive.sha256" "$version" "$tag" "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: enigma-firmware-lichuang-esp32s3
+          path: |
+            ${{ runner.temp }}/enigma-firmware/*.zip
+            ${{ runner.temp }}/enigma-firmware/*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

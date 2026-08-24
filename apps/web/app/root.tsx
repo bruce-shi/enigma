@@ -3,11 +3,11 @@ import type { LinksFunction, MetaFunction } from "react-router";
 import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, useRouteError } from "react-router";
 
 export const meta: MetaFunction = () => [
-  { title: "Enigma — open-source iPhone location testing" },
+  { title: "Enigma — iPhone location simulation" },
   {
     name: "description",
     content:
-      "A local-first GPL-3.0 desktop and embedded utility for controlled iPhone location simulation.",
+      "Plan routes, replay GPX tracks, teleport, and steer a paired iPhone from Enigma's focused map workspace.",
   },
 ];
 

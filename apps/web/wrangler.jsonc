@@ -1,7 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "enigma-web",
+  "account_id": "f129fdec623341392bfb3fc13b681ec6",
   "main": "./workers/app.ts",
   "compatibility_date": "2026-08-18",
-  "compatibility_flags": ["nodejs_compat"]
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "enigma.bruceshi.com", "custom_domain": true }]
 }
