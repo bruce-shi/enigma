@@ -67,5 +67,10 @@ flash encryption are not enabled. The prototype firmware also shares one embedde
 **BOOT** while resetting or powering on to clear pairing data, and remove **Enigma
 Location Portal Trust** from the iPhone before giving the board to another person.
 
+During normal operation, click the physical **BOOT/user** key to turn only the LCD and
+backlight off; click it again to wake the display. Wi-Fi, the web portal, pairing, and
+location simulation continue while the display is dark. Hold the key for two seconds
+for full software-off instead.
+
 See [troubleshooting](troubleshooting.md) for provisioning and serial-port problems, and
 [compatibility](compatibility.md) for the current qualification boundary.

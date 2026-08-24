@@ -203,6 +203,12 @@ impl LcdDisplay {
         esp!(unsafe { sys::esp_lcd_panel_disp_on_off(self.panel, false) })?;
         Ok(())
     }
+
+    pub(super) fn power_on(&mut self) -> Result<(), Box<dyn Error>> {
+        self.wait_for_transfer();
+        esp!(unsafe { sys::esp_lcd_panel_disp_on_off(self.panel, true) })?;
+        Ok(())
+    }
 }
 
 impl OriginDimensions for LcdDisplay {

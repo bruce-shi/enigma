@@ -141,6 +141,7 @@ where
     let mut idle_ticks = 0u32;
     let mut touch_error_count = 0u32;
     let mut power_button_ticks = 0u32;
+    let mut display_awake = true;
     loop {
         if let Ok(request) = portal_requests.try_recv() {
             let action_request = match request {
@@ -174,7 +175,9 @@ where
                 if !locked {
                     status = outcome.message.clone();
                     status_ok = outcome.success;
-                    render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                    if display_awake {
+                        render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                    }
                 }
                 let _ = reply.send(outcome);
             }
@@ -183,6 +186,23 @@ where
         if boot_button.is_low() {
             power_button_ticks = power_button_ticks.saturating_add(1);
             if power_button_ticks >= POWER_BUTTON_HOLD_TICKS {
+                if !display_awake {
+                    display.power_on()?;
+                    if locked {
+                        render_lock(
+                            &mut display,
+                            &wifi_label,
+                            lock_message,
+                            lock_message == "Enter operator PIN",
+                            pin_gate.entered_len(),
+                        )?;
+                    } else {
+                        render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                    }
+                    backlight.set_low().map_err(|error| {
+                        io::Error::other(format!("backlight wake failed: {error}"))
+                    })?;
+                }
                 if locked {
                     render_lock(
                         &mut display,
@@ -272,8 +292,49 @@ where
                 log::info!("power button wake: restarting Enigma firmware");
                 unsafe { sys::esp_restart() };
             }
-        } else {
+        } else if power_button_ticks > 0 {
+            let short_press = power_button_ticks < POWER_BUTTON_HOLD_TICKS;
             power_button_ticks = 0;
+            if short_press {
+                FreeRtos::delay_ms(POWER_BUTTON_RELEASE_DEBOUNCE_MS);
+                if boot_button.is_low() {
+                    continue;
+                }
+                if display_awake {
+                    backlight.set_high().map_err(|error| {
+                        io::Error::other(format!("backlight display-off failed: {error}"))
+                    })?;
+                    display.power_off()?;
+                    display_awake = false;
+                    touch_was_down = false;
+                    log::info!(
+                        "display sleep: LCD and backlight off; Wi-Fi and location services remain active"
+                    );
+                } else {
+                    display.power_on()?;
+                    if locked {
+                        render_lock(
+                            &mut display,
+                            &wifi_label,
+                            lock_message,
+                            lock_message == "Enter operator PIN",
+                            pin_gate.entered_len(),
+                        )?;
+                    } else {
+                        render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                    }
+                    backlight.set_low().map_err(|error| {
+                        io::Error::other(format!("backlight display-on failed: {error}"))
+                    })?;
+                    display_awake = true;
+                    log::info!("display wake: LCD and backlight on");
+                }
+            }
+        }
+
+        if !display_awake {
+            FreeRtos::delay_ms(UI_POLL_MS);
+            continue;
         }
 
         let touch = match read_touch(&mut i2c) {
@@ -609,7 +670,7 @@ fn render(
     Text::new("iPhone Location", Point::new(5, 12), title_style)
         .draw(display)
         .map_err(|_| io::Error::other("display title failed"))?;
-    Text::new("Hold BOOT", Point::new(199, 12), dim_style)
+    Text::new("BOOT: LCD", Point::new(199, 12), dim_style)
         .draw(display)
         .map_err(|_| io::Error::other("display power hint failed"))?;
     button(

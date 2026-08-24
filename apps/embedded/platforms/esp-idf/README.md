@@ -148,12 +148,15 @@ available after reset.
 `idevice` cannot read the iPhone's actual GPS. The Safari portal obtains real
 coordinates through the browser's separately permissioned Geolocation API.
 
-The second physical button is the **BOOT/user** button on GPIO0. While the UI is
-running, hold it for two seconds and release it to restore an active simulated
-location, turn off the LCD and Wi-Fi, and enter low-power sleep. Press **BOOT** once
-to wake. The reset button keeps its normal reset behavior. This is a low-power
-software-off state; USB power remains connected and the board is not electrically
-disconnected.
+The second physical button is the **BOOT/user** button on GPIO0. A short click
+turns the LCD and backlight off; click **BOOT** again to redraw and wake the
+display. Display sleep leaves Wi-Fi, the HTTPS portal, pairing, and any active
+location simulation running, and touch input is ignored while the screen is
+dark. Hold **BOOT** for two seconds and release it for the existing full
+software-off flow: restore an active simulated location, turn off the LCD and
+Wi-Fi, and enter low-power sleep. Press **BOOT** once to wake from software-off.
+The reset button keeps its normal reset behavior. USB power remains connected
+in both states and the board is not electrically disconnected.
 
 The operator PIN is only a first-pass physical UI gate. It is compiled into the
 firmware, has no secure retry limit, and does not encrypt pairing data or flash.
@@ -206,7 +209,8 @@ does not clear pairing. This does not erase recent locations.
 ## Board facts retained from the C++ reference
 
 - 16 MiB flash and 8 MiB octal PSRAM
-- BOOT/user button: GPIO0; hold two seconds for software-off, press to wake
+- BOOT/user button: GPIO0; click to toggle the display, hold two seconds for
+  software-off, and press to wake
 - WS2812 status LED: GPIO48
 - ST7789 320x240 display: MOSI GPIO40, SCLK GPIO41, D/C GPIO39
 - active-low display backlight: GPIO42
