@@ -75,7 +75,9 @@ and an 88 KiB NVS partition within the board's 16 MiB flash.
 4. On the iPhone, join the SSID shown at the top of the board display
    (`Enigma-XXXX`). The password is `enigma-setup`. Choose **Use Without
    Internet** if iOS warns that the network has no internet.
-5. Keep the iPhone unlocked for the first test. Enter the default operator PIN
+5. Complete the one-time HTTPS trust setup below if you want to save the
+   iPhone's real GPS position from Safari.
+6. Keep the iPhone unlocked for the first test. Enter the default operator PIN
    **1234** on the board; it unlocks immediately after the fourth digit. Select
    a location and tap **SET LOCATION**. Tap **RESTORE** to return to real GPS.
 
@@ -86,6 +88,44 @@ there is no manual IP or port entry. Provisioning remains available in a
 background UART listener whenever the normal touch UI is running.
 The desktop app therefore does not depend on the board's unreliable CH340K
 auto-reset circuit or a short startup window.
+
+## Save the iPhone's current location from Safari
+
+The hotspot runs a captive HTTP onboarding page, an HTTPS location portal, and
+a small DNS responder. While joined to `Enigma-XXXX`, `enigma.test` resolves to
+the board rather than the internet. iOS requires a trusted HTTPS origin before
+Safari exposes `navigator.geolocation`, so the first use needs a manual trust
+step:
+
+1. Open `http://enigma.test` in Safari. The captive-network window may open the
+   same page automatically.
+2. Tap **Download trust profile**. In Settings, tap **Profile Downloaded** and
+   install **Enigma Location Portal Trust**. The local profile is intentionally
+   unsigned, so iOS shows that fact during installation.
+3. Go to Settings > General > About > Certificate Trust Settings and enable
+   full trust for **Enigma Local Portal CA**.
+4. Return to Safari and open `https://enigma.test`.
+5. In the **New location** tab, change **Location name** if desired, tap **Use
+   my current location**, allow Safari location access, then tap **Save to
+   board**.
+
+Saving adds the coordinates to the six-entry recent list in NVS and refreshes
+the touch-screen catalog. The mobile portal then opens the **Saved** tab, whose
+badge shows the current stored count. Tap **Set** on any row to apply it to the
+connected iPhone, or **Refresh** to reload NVS state. The tab bar stays visible
+while scrolling, controls use iPhone-friendly touch targets, and **Enter
+coordinates manually** remains collapsed until needed. Saving alone does not
+start location simulation. The touch-screen **SET LOCATION** and **RESTORE**
+controls remain available as before.
+
+The firmware contains the `enigma.test` server certificate and its private key.
+The installed profile contains only the public CA certificate; the CA signing
+key is not stored in the repository or firmware. This prototype uses the same
+portal identity on every image, so someone who extracts the firmware can
+impersonate `enigma.test` to a phone that trusts this CA if they can also
+control that phone's network. Remove **Enigma Location Portal Trust** from the
+iPhone when the board is no longer used. Per-board certificates are required
+for a production security boundary.
 
 The pairing identities are sensitive and are currently stored in ordinary NVS;
 this prototype does not yet enable ESP32 flash/NVS encryption. Erase the board
@@ -100,12 +140,13 @@ bottom-edge **ENTER** button is not required. The lock screen also shows the
 board Wi-Fi SSID and password. Tap **LOCK** at the top right to protect the
 controls again without restarting. Tap a row, or use **UP** and **DN**, then tap
 **SET LOCATION**.
-The latest six successfully applied locations are stored in flash, moved to the
-top of the list, and remain available after reset.
+The latest six locations saved from the Safari portal or successfully applied
+from the touch UI are stored in flash, moved to the top of the list, and remain
+available after reset.
 
 **RESTORE** clears simulation and lets the iPhone use its real GPS again. The
-`idevice` service cannot read the iPhone's actual GPS, so the recent list only
-contains simulated locations successfully applied from this UI.
+`idevice` cannot read the iPhone's actual GPS. The Safari portal obtains real
+coordinates through the browser's separately permissioned Geolocation API.
 
 The second physical button is the **BOOT/user** button on GPIO0. While the UI is
 running, hold it for two seconds and release it to restore an active simulated
@@ -131,10 +172,11 @@ The serial monitor should progress through these checkpoints:
 1. `transport target: board Wi-Fi with imported Apple pairing identities`
 2. `persistent desktop pairing listener ready`
 3. `Wi-Fi access point ready: SSID ...`
-4. `display: LCD chip-select asserted; native ST7789 initialized`
-5. `display: active-low GPIO42 backlight enabled`
-6. Four `display: showing ... LCD self-test` messages
-7. `display: first frame drawn; touch UI locked and ready`
+4. `location portal ready: onboarding http://enigma.test, secure portal https://enigma.test`
+5. `display: LCD chip-select asserted; native ST7789 initialized`
+6. `display: active-low GPIO42 backlight enabled`
+7. Four `display: showing ... LCD self-test` messages
+8. `display: first frame drawn; touch UI locked and ready`
 
 After the iPhone joins, expect `Wi-Fi: iPhone received address ...`. A Set or
 Restore tap should then log the discovered remote-pairing port, the announced
@@ -142,6 +184,10 @@ CoreDevice tunnel port, `iPhone modern location service ready over Wi-Fi`, and
 the successful action. The legacy service is retained only for older iOS
 versions. Wi-Fi/iPhone runtime behavior is build-verified but still awaits
 physical acceptance; the display and touch path is physically verified.
+For a portal save, expect `web portal: saving location ...`, then confirm the
+new name appears at the top of the unlocked touch catalog after the browser
+reports success. HTTPS trust, captive DNS, Safari geolocation, and NVS saving
+are build-verified but still require physical iPhone acceptance.
 
 If flash succeeds but the monitor loses its connection, reopen it from the
 platform package:

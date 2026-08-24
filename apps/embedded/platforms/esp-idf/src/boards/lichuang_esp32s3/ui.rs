@@ -26,7 +26,11 @@ use esp_idf_svc::{
 };
 
 use super::{Hardware, display, lcd::LcdDisplay, shared_i2c};
-use crate::wifi_access::WifiAccessPoint;
+use crate::{
+    location_portal::{LocationPortal, PortalRequest},
+    location_store::MAX_SAVED_LOCATIONS,
+    wifi_access::WifiAccessPoint,
+};
 
 const ROW_COUNT: usize = 4;
 const ROW_TOP: i32 = 31;
@@ -49,6 +53,7 @@ const PIN_KEY_GAP: i32 = 3;
 pub fn run<F>(
     hardware: Hardware,
     mut catalog: Vec<Location>,
+    mut saved_locations: Vec<Location>,
     mut handle: F,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -73,6 +78,8 @@ where
     } = hardware;
     let access_point = WifiAccessPoint::start(modem)
         .map_err(|error| io::Error::other(format!("Wi-Fi access point failed: {error}")))?;
+    let (location_portal, portal_requests) = LocationPortal::start(access_point.address())
+        .map_err(|error| io::Error::other(format!("location portal failed: {error}")))?;
     log::info!("display: initializing I2C1 at 400 kHz");
     let mut i2c = I2cDriver::new(i2c, sda, scl, &I2cConfig::new().baudrate(400.kHz().into()))
         .map_err(|error| io::Error::other(format!("display I2C init failed: {error}")))?;
@@ -135,6 +142,44 @@ where
     let mut touch_error_count = 0u32;
     let mut power_button_ticks = 0u32;
     loop {
+        if let Ok(request) = portal_requests.try_recv() {
+            let action_request = match request {
+                PortalRequest::List { reply } => {
+                    let _ = reply.send(saved_locations.clone());
+                    None
+                }
+                PortalRequest::Save { location, reply } => Some((false, location, reply)),
+                PortalRequest::Set { location, reply } => Some((true, location, reply)),
+            };
+            if let Some((set_location, location, reply)) = action_request {
+                let action_label = if set_location { "setting" } else { "saving" };
+                log::info!("web portal: {action_label} location `{}`", location.name);
+                let outcome = handle(if set_location {
+                    Action::Set(location.clone())
+                } else {
+                    Action::Save(location.clone())
+                });
+                if outcome.success {
+                    promote(&mut catalog, &location);
+                    promote(&mut saved_locations, &location);
+                    saved_locations.truncate(MAX_SAVED_LOCATIONS);
+                    selected = 0;
+                    scroll = 0;
+                    if set_location {
+                        location_active = true;
+                    }
+                } else {
+                    log::error!("web portal location action failed: {}", outcome.message);
+                }
+                if !locked {
+                    status = outcome.message.clone();
+                    status_ok = outcome.success;
+                    render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                }
+                let _ = reply.send(outcome);
+            }
+        }
+
         if boot_button.is_low() {
             power_button_ticks = power_button_ticks.saturating_add(1);
             if power_button_ticks >= POWER_BUTTON_HOLD_TICKS {
@@ -206,6 +251,7 @@ where
                 backlight.set_high().map_err(|error| {
                     io::Error::other(format!("backlight power-off failed: {error}"))
                 })?;
+                drop(location_portal);
                 drop(access_point);
                 let mut sleep = LightSleep::new()?.wakeup_on_gpio(&boot_button, Level::Low)?;
                 log::info!("power off: entering low-power sleep; press BOOT to wake");
@@ -338,6 +384,7 @@ where
             let applied = matches!(action, Action::Set(_));
             let selected_location = match &action {
                 Action::Set(location) => Some(location.clone()),
+                Action::Save(_) => unreachable!("touch UI only creates set or restore actions"),
                 Action::Restore => None,
             };
             let outcome = handle(action);
@@ -348,6 +395,13 @@ where
                         .as_ref()
                         .expect("set action has a location"),
                 );
+                promote(
+                    &mut saved_locations,
+                    selected_location
+                        .as_ref()
+                        .expect("set action has a location"),
+                );
+                saved_locations.truncate(MAX_SAVED_LOCATIONS);
                 selected = 0;
                 scroll = 0;
             }

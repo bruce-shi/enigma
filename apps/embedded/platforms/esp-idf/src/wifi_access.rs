@@ -9,10 +9,12 @@ use std::{
 use esp_idf_svc::{
     eventloop::{EspSystemEventLoop, EspSystemSubscription},
     hal::modem::Modem,
+    ipv4,
     netif::IpEvent,
+    netif::{EspNetif, NetifConfiguration, NetifStack},
     wifi::{
         AccessPointConfiguration, AuthMethod, BlockingWifi, Configuration, EspWifi, WifiDeviceId,
-        WifiEvent,
+        WifiDriver, WifiEvent,
     },
 };
 
@@ -28,14 +30,27 @@ pub struct WifiAccessPoint {
     _ip_subscription: EspSystemSubscription<'static>,
     _wifi_subscription: EspSystemSubscription<'static>,
     ssid: String,
+    address: Ipv4Addr,
 }
 
 impl WifiAccessPoint {
     pub fn start(modem: Modem<'static>) -> Result<Self, Box<dyn Error>> {
         CLIENT_IPV4.store(NO_CLIENT, Ordering::Release);
         let event_loop = EspSystemEventLoop::take()?;
+        let driver = WifiDriver::new(modem, event_loop.clone(), None)?;
+        let mut router = ipv4::RouterConfiguration::default();
+        let portal_address = router.subnet.gateway;
+        // EspNetif's default AP router advertises 8.8.8.8. The hotspot has no
+        // upstream internet and runs its own DNS responder, so DHCP must point
+        // clients back to the board for enigma.test and captive-portal names.
+        router.dns = Some(portal_address);
+        router.secondary_dns = None;
+        let ap_netif = EspNetif::new_with_conf(&NetifConfiguration {
+            ip_configuration: Some(ipv4::Configuration::Router(router)),
+            ..NetifConfiguration::wifi_default_router()
+        })?;
         let mut wifi = BlockingWifi::wrap(
-            EspWifi::new(modem, event_loop.clone(), None)?,
+            EspWifi::wrap_all(driver, EspNetif::new(NetifStack::Sta)?, ap_netif)?,
             event_loop.clone(),
         )?;
         let mac = wifi.wifi().get_mac(WifiDeviceId::Ap)?;
@@ -67,18 +82,28 @@ impl WifiAccessPoint {
         wifi.set_configuration(&configuration)?;
         wifi.start()?;
         wifi.wait_netif_up()?;
-        log::info!("Wi-Fi access point ready: SSID `{ssid}`, password `{PASSWORD}`");
+        let ip_info = wifi.wifi().ap_netif().get_ip_info()?;
+        let address = ip_info.ip;
+        log::info!(
+            "Wi-Fi access point ready: SSID `{ssid}`, password `{PASSWORD}`, address {address}, DNS {}",
+            ip_info.dns.unwrap_or(portal_address)
+        );
 
         Ok(Self {
             _wifi: wifi,
             _ip_subscription: ip_subscription,
             _wifi_subscription: wifi_subscription,
             ssid,
+            address,
         })
     }
 
     pub fn display_label(&self) -> String {
         format!("{} / {}", self.ssid, PASSWORD)
+    }
+
+    pub fn address(&self) -> Ipv4Addr {
+        self.address
     }
 }
 

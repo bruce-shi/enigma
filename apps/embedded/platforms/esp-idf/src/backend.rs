@@ -34,6 +34,10 @@ impl EspIdfBackend {
         self.location_store.catalog()
     }
 
+    pub fn saved_locations(&self) -> Result<Vec<Location>, Box<dyn Error>> {
+        self.location_store.saved_locations()
+    }
+
     pub fn has_pairing_record(&self) -> Result<bool, Box<dyn Error>> {
         iphone::has_pairing_record(&self.pairing_storage)
     }
@@ -64,6 +68,10 @@ impl LocationBackend for EspIdfBackend {
             self.controller.take();
         }
         result
+    }
+
+    fn save_location(&mut self, location: &Location) -> Result<(), Self::Error> {
+        self.location_store.record(location)
     }
 
     fn restore_location(&mut self) -> Result<(), Self::Error> {

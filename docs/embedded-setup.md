@@ -48,14 +48,24 @@ partition table, and application at their required offsets.
 
 1. Join the `Enigma-XXXX` Wi-Fi network shown on the board. The prototype password is
    `enigma-setup`; choose **Use Without Internet** if iOS asks.
-2. Enter the prototype operator PIN `1234` on the board.
-3. Select a location and tap **SET LOCATION**.
-4. Tap **RESTORE** and confirm that the iPhone returns to real GPS before ending the
+2. To add the phone's real position, open `http://enigma.test` in Safari. Download and
+   install **Enigma Location Portal Trust**, then enable its root under Settings >
+   General > About > Certificate Trust Settings. This is required only once per iPhone.
+3. Open `https://enigma.test`. In **New location**, optionally rename the location,
+   tap **Use my current location**, then **Save to board**. The page switches to the
+   **Saved** tab after saving; use a row's **Set** button to apply that location or
+   **Refresh** to reload the list from NVS. Manual coordinate entry is collapsed
+   under **Enter coordinates manually**. Saving alone does not apply the location.
+4. Enter the prototype operator PIN `1234` on the board.
+5. Select the saved or built-in location and tap **SET LOCATION**.
+6. Tap **RESTORE** and confirm that the iPhone returns to real GPS before ending the
    session.
 
 The board stores sensitive Apple pairing identities in ordinary NVS. Secure Boot and
-flash encryption are not enabled. Hold **BOOT** while resetting or powering on to clear
-pairing data before giving the board to another person.
+flash encryption are not enabled. The prototype firmware also shares one embedded
+`enigma.test` TLS server key across images; the CA signing key is not included. Hold
+**BOOT** while resetting or powering on to clear pairing data, and remove **Enigma
+Location Portal Trust** from the iPhone before giving the board to another person.
 
 See [troubleshooting](troubleshooting.md) for provisioning and serial-port problems, and
 [compatibility](compatibility.md) for the current qualification boundary.

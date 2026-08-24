@@ -30,6 +30,7 @@ pub(crate) trait EspIdfBoard {
     fn run_ui<F>(
         hardware: Self::Hardware,
         catalog: Vec<Location>,
+        saved_locations: Vec<Location>,
         handle: F,
     ) -> Result<(), Box<dyn Error>>
     where
@@ -72,12 +73,17 @@ pub fn run<B: EspIdfBoard>() -> Result<(), Box<dyn Error>> {
         info!("pairing identities incomplete; desktop provisioning remains available over CH340K");
     }
     B::start_pairing_listener(&mut hardware, iphone::pairing_storage(partition)?)?;
+    let saved_locations = backend.saved_locations()?;
     let catalog = backend.catalog()?;
-    info!("storage ready; loaded {} location choices", catalog.len());
+    info!(
+        "storage ready; loaded {} saved and {} total location choices",
+        saved_locations.len(),
+        catalog.len()
+    );
     let mut application = Application::new(backend);
 
     info!("starting board display and touch UI");
-    B::run_ui(hardware, catalog, move |action| {
+    B::run_ui(hardware, catalog, saved_locations, move |action| {
         let outcome = application.handle(action);
         if !outcome.success {
             log::error!("iPhone location action failed: {}", outcome.message);

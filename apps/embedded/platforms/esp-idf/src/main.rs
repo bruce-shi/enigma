@@ -3,6 +3,7 @@ mod board;
 mod boards;
 mod idevice_bridge;
 mod iphone;
+mod location_portal;
 mod location_store;
 mod serial_provision;
 mod wifi_access;

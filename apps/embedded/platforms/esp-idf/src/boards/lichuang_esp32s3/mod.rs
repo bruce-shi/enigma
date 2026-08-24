@@ -88,12 +88,13 @@ impl EspIdfBoard for LichuangEsp32S3 {
     fn run_ui<F>(
         hardware: Self::Hardware,
         catalog: Vec<Location>,
+        saved_locations: Vec<Location>,
         handle: F,
     ) -> Result<(), Box<dyn Error>>
     where
         F: FnMut(Action) -> Outcome,
     {
-        ui::run(hardware, catalog, handle)
+        ui::run(hardware, catalog, saved_locations, handle)
     }
 }
 

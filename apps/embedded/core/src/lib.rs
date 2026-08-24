@@ -54,6 +54,7 @@ impl Location {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Action {
     Set(Location),
+    Save(Location),
     Restore,
 }
 
@@ -167,6 +168,9 @@ pub trait LocationBackend {
     /// Applies and persists a simulated location.
     fn set_location(&mut self, location: &Location) -> Result<(), Self::Error>;
 
+    /// Persists a location without changing the connected device.
+    fn save_location(&mut self, location: &Location) -> Result<(), Self::Error>;
+
     /// Clears simulation so the connected device resumes its real location.
     fn restore_location(&mut self) -> Result<(), Self::Error>;
 }
@@ -189,6 +193,10 @@ where
                 .backend
                 .set_location(&location)
                 .map(|()| format!("Set: {}", location.name)),
+            Action::Save(location) => self
+                .backend
+                .save_location(&location)
+                .map(|()| format!("Saved: {}", location.name)),
             Action::Restore => self
                 .backend
                 .restore_location()
@@ -268,6 +276,7 @@ mod tests {
     struct MockBackend {
         fail: bool,
         restored: bool,
+        saved: Option<Location>,
     }
 
     impl LocationBackend for MockBackend {
@@ -275,6 +284,11 @@ mod tests {
 
         fn set_location(&mut self, _location: &Location) -> Result<(), Self::Error> {
             if self.fail { Err("offline") } else { Ok(()) }
+        }
+
+        fn save_location(&mut self, location: &Location) -> Result<(), Self::Error> {
+            self.saved = Some(location.clone());
+            Ok(())
         }
 
         fn restore_location(&mut self) -> Result<(), Self::Error> {
@@ -288,6 +302,7 @@ mod tests {
         let mut application = Application::new(MockBackend {
             fail: true,
             restored: false,
+            saved: None,
         });
         let failed = application.handle(Action::Set(Location::new("Home", "1", "2")));
         assert_eq!(failed.message, String::from("Error: offline"));
@@ -295,6 +310,9 @@ mod tests {
 
         let restored = application.handle(Action::Restore);
         assert_eq!(restored, Outcome::success("Real GPS restored"));
+
+        let saved = application.handle(Action::Save(Location::new("Home", "1", "2")));
+        assert_eq!(saved, Outcome::success("Saved: Home"));
     }
 
     #[test]

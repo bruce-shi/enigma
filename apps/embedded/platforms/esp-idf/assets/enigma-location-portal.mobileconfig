@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadCertificateFileName</key>
+      <string>enigma-location-portal-ca.crt</string>
+      <key>PayloadContent</key>
+      <data>
+      MIIDWDCCAkCgAwIBAgIULh50R1jECm1WSt+mhlG91VLHxSIwDQYJKoZIhvcNAQELBQAwMjEfMB0GA1UEAwwWRW5pZ21hIExvY2FsIFBvcnRhbCBDQTEPMA0GA1UECgwGRW5pZ21hMB4XDTI2MDgyNDE2MzUyMloXDTM2MDgyMTE2MzUyMlowMjEfMB0GA1UEAwwWRW5pZ21hIExvY2FsIFBvcnRhbCBDQTEPMA0GA1UECgwGRW5pZ21hMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzMA1gxv1/cZ+rXQElDcyafk0wQhBC1uLDmKRuTJ0MOGMdTvkOgnHmVALyuEsyyqz9zyVOKKICqgiKeex4UXL0QdgOmvWztdJjpJnbz1p3PYO4Q1Z/bDJI9QMzLoa7+talA/XxVWDr14csrflvklnmnNJgqAhfzgpidYsxTqZUi0zXM8a4ujHc+HKf9NhuV47YRxqz40GBu0SxyEckXK8vwxkpKh5/UDnSGQLwnvcpVgMhKCFjzXpnPISEVzNp6qHcn2OoroAzn8vA89KAK/sLI05tFC/ct60WqRrJO4AkVLJyd8n0yYJtc2RPKZE1O9eQV1Iod35uYgOuzCa9Z2EYQIDAQABo2YwZDAfBgNVHSMEGDAWgBT6FYagWIgkPjtzoVqdubQbCGqluTASBgNVHRMBAf8ECDAGAQH/AgEAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHQ4EFgQU+hWGoFiIJD47c6Fanbm0GwhqpbkwDQYJKoZIhvcNAQELBQADggEBAKuf3pykrAEWoaBnrl1j6eYo02iooi9yHO5cML9ZX0QLqJulBtWGIC0ZCSOZtvRKcUYzH6hZU4J+bibn371npMt8E9b1s9xzfuxQ7wghFf6KovTADk3jychxgposbDHY/F4V6QY9WkFJVXZRHAwNO5ZbBA7aubbfIoMyc0r1XviH+mQjOyunwmL/UaMM5RVLL0Thb78jlw3MUoP2Iof/MTvpwU09GYb1PFt3tuTtPGz7X5k8hyHAxPtvhxgMGe+vV0bfwEzWcZdjEp0oQSj870DYwueVr8Ri19LRvYVJ5RoXA5pNVWCZ/1T9mqDLvMQJ7JxV3jAopLvzWCkIAzEdqs4=
+      </data>
+      <key>PayloadDescription</key>
+      <string>Trusts the HTTPS portal available only on the Enigma board hotspot.</string>
+      <key>PayloadDisplayName</key>
+      <string>Enigma Local Portal CA</string>
+      <key>PayloadIdentifier</key>
+      <string>com.enigma.location-portal.ca</string>
+      <key>PayloadType</key>
+      <string>com.apple.security.root</string>
+      <key>PayloadUUID</key>
+      <string>422988C0-8823-4720-B8AA-C6C9B6DA91BD</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+    </dict>
+  </array>
+  <key>PayloadDescription</key>
+  <string>Installs the public CA needed for Safari location access on https://enigma.test.</string>
+  <key>PayloadDisplayName</key>
+  <string>Enigma Location Portal Trust</string>
+  <key>PayloadIdentifier</key>
+  <string>com.enigma.location-portal.trust</string>
+  <key>PayloadOrganization</key>
+  <string>Enigma</string>
+  <key>PayloadRemovalDisallowed</key>
+  <false/>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>25D09417-45C5-4AF1-92B8-565E5ADA465E</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>
