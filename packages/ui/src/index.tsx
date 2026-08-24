@@ -1,6 +1,6 @@
 import type { DeviceState, SimulationState } from "@enigma/contracts";
 import { AlertDialog, Button } from "@heroui/react";
-import { Laptop, MapPin, Moon, Pause, Play, RotateCcw, Smartphone, Sun } from "lucide-react";
+import { Laptop, Moon, Pause, Play, RotateCcw, Smartphone, Sun } from "lucide-react";
 import {
   type ComponentPropsWithoutRef,
   type PropsWithChildren,
@@ -11,6 +11,30 @@ import {
 } from "react";
 
 export type ThemePreference = "system" | "light" | "dark";
+
+export function EnigmaMark({ className = "" }: { className?: string }) {
+  return (
+    <svg aria-hidden className={className} viewBox="0 0 64 64">
+      <rect width="64" height="64" rx="14" fill="#4169e1" />
+      <path
+        d="M17 16h26c5.5 0 9 3.5 9 8.5S48.5 33 43 33H24c-5 0-8 3-8 8v4c0 5 3 8 8 8h17"
+        fill="none"
+        stroke="#fff"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="5.5"
+      />
+      <path d="M16 42h17" fill="none" stroke="#fff" strokeLinecap="round" strokeWidth="5.5" />
+      <circle cx="17" cy="16" r="4.5" fill="#fff" />
+      <circle cx="34" cy="42" r="4.5" fill="#fff" />
+      <path
+        d="M48 41c-4.7 0-8.5 3.8-8.5 8.5 0 6.1 8.5 10.8 8.5 10.8s8.5-4.7 8.5-10.8c0-4.7-3.8-8.5-8.5-8.5Zm0 11.7a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Z"
+        fill="#fff"
+        fillRule="evenodd"
+      />
+    </svg>
+  );
+}
 
 function resolveTheme(preference: ThemePreference): "enigma-light" | "enigma-dark" {
   if (preference === "dark") return "enigma-dark";
@@ -103,9 +127,7 @@ export function AppShell({
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-50 flex min-h-16 items-center gap-4 border-b border-border bg-background/90 px-4 backdrop-blur md:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-xl bg-accent text-accent-foreground">
-            <MapPin aria-hidden size={20} />
-          </span>
+          <EnigmaMark className="size-9 shrink-0" />
           <div className="min-w-0">
             <p className="truncate font-semibold leading-tight">{product}</p>
             {context && <p className="truncate text-xs text-muted-foreground">{context}</p>}

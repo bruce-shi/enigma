@@ -1,5 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <title>Enigma location pin</title>
-  <rect width="1024" height="1024" rx="224" fill="#4169e1"/>
-  <path fill="#fff" d="M512 176c-146 0-264 118-264 264 0 199 264 408 264 408s264-209 264-408c0-146-118-264-264-264Zm0 360a104 104 0 1 1 0-208 104 104 0 0 1 0 208Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Enigma route mark</title>
+  <rect width="64" height="64" rx="14" fill="#4169e1"/>
+  <path
+    d="M17 16h26c5.5 0 9 3.5 9 8.5S48.5 33 43 33H24c-5 0-8 3-8 8v4c0 5 3 8 8 8h17"
+    fill="none"
+    stroke="#fff"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="5.5"
+  />
+  <path d="M16 42h17" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="5.5"/>
+  <circle cx="17" cy="16" r="4.5" fill="#fff"/>
+  <circle cx="34" cy="42" r="4.5" fill="#fff"/>
+  <path
+    d="M48 41c-4.7 0-8.5 3.8-8.5 8.5 0 6.1 8.5 10.8 8.5 10.8s8.5-4.7 8.5-10.8c0-4.7-3.8-8.5-8.5-8.5Zm0 11.7a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Z"
+    fill="#fff"
+    fill-rule="evenodd"
+  />
 </svg>
