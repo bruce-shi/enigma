@@ -4,16 +4,24 @@ import remarkGfm from "remark-gfm";
 import { rewriteDocumentationLink } from "../docs";
 
 const components: Components = {
-  h1: (props) => <h1 className="text-4xl font-semibold tracking-tight md:text-5xl" {...props} />,
-  h2: (props) => <h2 className="mt-12 text-2xl font-semibold tracking-tight" {...props} />,
-  h3: (props) => <h3 className="mt-8 text-lg font-semibold" {...props} />,
-  p: (props) => <p className="mt-4 leading-7 text-muted-foreground" {...props} />,
-  ul: (props) => <ul className="mt-4 list-disc space-y-2 pl-6 text-muted-foreground" {...props} />,
-  ol: (props) => (
+  h1: ({ node: _node, ...props }) => (
+    <h1 className="text-4xl font-semibold tracking-tight md:text-5xl" {...props} />
+  ),
+  h2: ({ node: _node, ...props }) => (
+    <h2 className="mt-12 text-2xl font-semibold tracking-tight" {...props} />
+  ),
+  h3: ({ node: _node, ...props }) => <h3 className="mt-8 text-lg font-semibold" {...props} />,
+  p: ({ node: _node, ...props }) => (
+    <p className="mt-4 leading-7 text-muted-foreground" {...props} />
+  ),
+  ul: ({ node: _node, ...props }) => (
+    <ul className="mt-4 list-disc space-y-2 pl-6 text-muted-foreground" {...props} />
+  ),
+  ol: ({ node: _node, ...props }) => (
     <ol className="mt-4 list-decimal space-y-2 pl-6 text-muted-foreground" {...props} />
   ),
-  li: (props) => <li className="pl-1 leading-7" {...props} />,
-  a: ({ href = "", ...props }) => {
+  li: ({ node: _node, ...props }) => <li className="pl-1 leading-7" {...props} />,
+  a: ({ href = "", node: _node, ...props }) => {
     const destination = rewriteDocumentationLink(href);
     const external = /^https?:\/\//u.test(destination);
     return (
@@ -26,33 +34,33 @@ const components: Components = {
       />
     );
   },
-  blockquote: (props) => (
+  blockquote: ({ node: _node, ...props }) => (
     <blockquote className="mt-6 border-l-2 border-accent pl-4 text-muted-foreground" {...props} />
   ),
-  pre: (props) => (
+  pre: ({ node: _node, ...props }) => (
     <pre
       className="mt-5 overflow-x-auto rounded-xl border border-border bg-surface-secondary p-4 text-sm leading-6"
       {...props}
     />
   ),
-  code: ({ className, ...props }) => (
+  code: ({ className, node: _node, ...props }) => (
     <code
       className={`${className ?? ""} rounded bg-surface-secondary px-1.5 py-0.5 font-mono text-[.9em] text-foreground`}
       {...props}
     />
   ),
-  table: (props) => (
+  table: ({ node: _node, ...props }) => (
     <div className="mt-6 overflow-x-auto rounded-xl border border-border">
       <table className="w-full min-w-[680px] border-collapse text-left text-sm" {...props} />
     </div>
   ),
-  th: (props) => (
+  th: ({ node: _node, ...props }) => (
     <th className="border-b border-border bg-surface-secondary p-3 font-semibold" {...props} />
   ),
-  td: (props) => (
+  td: ({ node: _node, ...props }) => (
     <td className="border-b border-border p-3 align-top text-muted-foreground" {...props} />
   ),
-  hr: (props) => <hr className="my-10 border-border" {...props} />,
+  hr: ({ node: _node, ...props }) => <hr className="my-10 border-border" {...props} />,
 };
 
 export function MarkdownArticle({ markdown }: { markdown: string }) {
