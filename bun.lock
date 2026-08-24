@@ -9,7 +9,6 @@
         "@types/node": "24.3.1",
         "turbo": "2.10.11",
         "typescript": "5.9.2",
-        "vitest": "3.2.4",
       },
     },
     "apps/desktop": {
@@ -61,7 +60,6 @@
         "@tailwindcss/vite": "4.3.3",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
-        "@vitejs/plugin-react": "6.0.5",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",

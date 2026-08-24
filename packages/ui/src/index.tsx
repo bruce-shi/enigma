@@ -20,14 +20,14 @@ function resolveTheme(preference: ThemePreference): "enigma-light" | "enigma-dar
     : "enigma-light";
 }
 
-export function applyTheme(preference: ThemePreference): void {
+function applyTheme(preference: ThemePreference): void {
   if (typeof document === "undefined") return;
   const theme = resolveTheme(preference);
   document.documentElement.dataset.theme = theme;
   document.documentElement.classList.toggle("dark", theme === "enigma-dark");
 }
 
-export function useEnigmaTheme(
+function useEnigmaTheme(
   storageKey = "enigma.theme",
 ): [ThemePreference, (preference: ThemePreference) => void] {
   // The deterministic first snapshot keeps SSR hydration stable. The website's

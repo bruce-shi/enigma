@@ -10,7 +10,7 @@ const EARTH_RADIUS_METERS = 6_371_008.8;
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
 const toDegrees = (radians: number) => (radians * 180) / Math.PI;
 
-export function normalizeLongitude(longitude: number): number {
+function normalizeLongitude(longitude: number): number {
   return ((((longitude + 180) % 360) + 360) % 360) - 180;
 }
 
@@ -32,7 +32,7 @@ export function assertCoordinate(point: Coordinate): void {
   }
 }
 
-export function assertRouteOptions(options: RouteOptions): void {
+function assertRouteOptions(options: RouteOptions): void {
   if (
     options.speedKph < LOCATION_LIMITS.minSpeedKph ||
     options.speedKph > LOCATION_LIMITS.maxSpeedKph
@@ -104,22 +104,6 @@ function seededVariation(seed: number, index: number): number {
 function effectiveSpeed(options: RouteOptions, sampleIndex: number): number {
   if (options.speedProfile === "constant") return options.speedKph;
   return options.speedKph * seededVariation(options.naturalVariationSeed ?? 1, sampleIndex);
-}
-
-export function expandRoutePoints(plan: PathPlan): Coordinate[] {
-  if (plan.points.length < 2) throw new RangeError("A path needs at least two points");
-  plan.points.forEach(assertCoordinate);
-  assertRouteOptions(plan.options);
-
-  const base = plan.options.roundTrip
-    ? [...plan.points, ...plan.points.slice(0, -1).reverse()]
-    : [...plan.points];
-  const expanded: Coordinate[] = [];
-  for (let repetition = 0; repetition < plan.options.repetitions; repetition += 1) {
-    const startsWherePreviousEnded = repetition > 0 && coordinatesEqual(expanded.at(-1), base[0]);
-    expanded.push(...(startsWherePreviousEnded ? base.slice(1) : base));
-  }
-  return expanded;
 }
 
 export function buildRouteSamples(plan: PathPlan): Coordinate[] {

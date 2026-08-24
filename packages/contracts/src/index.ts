@@ -1,4 +1,4 @@
-export type DeviceTransport = "usb" | "network";
+type DeviceTransport = "usb" | "network";
 
 export type DeviceState =
   | "disconnected"
@@ -30,7 +30,7 @@ export interface DeviceSummary {
   diagnosticCode?: DeviceDiagnosticCode;
 }
 
-export type DeviceDiagnosticCode =
+type DeviceDiagnosticCode =
   | "APPLE_DRIVER_MISSING"
   | "DEVICE_NOT_TRUSTED"
   | "DEVELOPER_MODE_DISABLED"
@@ -40,7 +40,7 @@ export type DeviceDiagnosticCode =
   | "NO_DEVICE"
   | "UNKNOWN";
 
-export type SpeedProfile = "constant" | "natural";
+type SpeedProfile = "constant" | "natural";
 
 export interface RouteOptions {
   speedKph: number;
@@ -51,7 +51,7 @@ export interface RouteOptions {
   naturalVariationSeed?: number;
 }
 
-export interface TeleportPlan {
+interface TeleportPlan {
   kind: "teleport";
   point: Coordinate;
 }
@@ -63,7 +63,7 @@ export interface PathPlan {
   honorTimestamps?: boolean;
 }
 
-export interface JoystickPlan {
+interface JoystickPlan {
   kind: "joystick";
   origin: Coordinate;
   speedKph: number;
