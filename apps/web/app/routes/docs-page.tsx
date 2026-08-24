@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { useLoaderData } from "react-router";
 import { MarkdownArticle } from "../components/MarkdownArticle";
 import { requireDocumentationPage } from "../docs";
+import { createErrorMeta, createPageMeta } from "../seo";
 
 export function loader({ params }: LoaderFunctionArgs) {
   return { slug: requireDocumentationPage(params.slug).slug };
@@ -9,14 +10,14 @@ export function loader({ params }: LoaderFunctionArgs) {
 
 export const meta: MetaFunction<typeof loader> = ({ loaderData }) => {
   if (!loaderData) {
-    return [{ title: "Documentation not found — Enigma" }];
+    return createErrorMeta(true);
   }
   const page = requireDocumentationPage(loaderData.slug);
-  return [
-    { title: `${page.title} — Enigma documentation` },
-    { name: "description", content: page.description },
-    { tagName: "link", rel: "canonical", href: `https://enigma.bruceshi.com${page.path}` },
-  ];
+  return createPageMeta({
+    title: `${page.title} | Enigma Location Changer Docs`,
+    description: page.description,
+    path: page.path,
+  });
 };
 
 export default function DocumentationPage() {

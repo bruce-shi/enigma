@@ -7,6 +7,7 @@ import {
   rewriteDocumentationLink,
 } from "./docs";
 import routes from "./routes";
+import { createErrorMeta, createPageMeta, defaultSeo, homeStructuredData, siteOrigin } from "./seo";
 
 describe("public website", () => {
   it("exports the landing page and nested documentation routes", () => {
@@ -40,6 +41,36 @@ describe("public website", () => {
     const copy = sources.join("\n");
     expect(copy).not.toMatch(/GPL-3\.0|without an account|no (?:Enigma )?account/u);
     expect(copy).toMatch(/Teleport|Build a route|Steer with a joystick|Replay GPX/u);
+  });
+
+  it("publishes GPS and location-based game metadata with canonical social URLs", () => {
+    const metadata = createPageMeta({ ...defaultSeo, path: "/" });
+    expect(defaultSeo.title).toMatch(/GPS Location Changer|Apps & Games/u);
+    expect(defaultSeo.description).toMatch(/Change your iPhone GPS location|location-based apps/u);
+    expect(metadata).toContainEqual({ property: "og:url", content: `${siteOrigin}/` });
+    expect(metadata).toContainEqual({ tagName: "link", rel: "canonical", href: `${siteOrigin}/` });
+    expect(JSON.stringify(homeStructuredData)).toMatch(
+      /SoftwareApplication|GPS location simulator|location-based game/u,
+    );
+  });
+
+  it("keeps error pages out of search results", () => {
+    expect(createErrorMeta(true)).toEqual([
+      { title: "Page not found — Enigma" },
+      { name: "robots", content: "noindex, nofollow" },
+    ]);
+  });
+
+  it("advertises every public page through robots and the sitemap", async () => {
+    const [robots, sitemap] = await Promise.all(
+      ["../public/robots.txt", "../public/sitemap.xml"].map((path) =>
+        readFile(new URL(path, import.meta.url), "utf8"),
+      ),
+    );
+    expect(robots).toContain(`Sitemap: ${siteOrigin}/sitemap.xml`);
+    for (const path of ["/", ...documentationPages.map((page) => page.path)]) {
+      expect(sitemap).toContain(`<loc>${new URL(path, siteOrigin).toString()}</loc>`);
+    }
   });
 
   it("publishes only the curated documentation set with unique routes and sources", () => {

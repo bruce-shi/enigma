@@ -1,15 +1,18 @@
 import "@enigma/ui/styles.css";
 import type { LinksFunction, MetaFunction } from "react-router";
 import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, useRouteError } from "react-router";
+import { createErrorMeta, createPageMeta, defaultSeo } from "./seo";
 
-export const meta: MetaFunction = () => [
-  { title: "Enigma — iPhone location simulation" },
-  {
-    name: "description",
-    content:
-      "Plan routes, replay GPX tracks, teleport, and steer a paired iPhone from Enigma's focused map workspace.",
-  },
-];
+export const meta: MetaFunction = ({ error }) => {
+  if (error) {
+    return createErrorMeta(isRouteErrorResponse(error) && error.status === 404);
+  }
+
+  return createPageMeta({
+    ...defaultSeo,
+    path: "/",
+  });
+};
 
 export const links: LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },

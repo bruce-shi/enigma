@@ -25,7 +25,7 @@ export function ButtonLink({
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell
-      context="iPhone location simulation"
+      context="iPhone GPS location simulator"
       navigation={
         <>
           <ButtonLink className="hidden sm:inline-flex" to="/#features" variant="ghost">
@@ -50,8 +50,9 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
       {children}
       <footer className="border-t border-border px-6 py-8 text-sm text-muted-foreground">
         <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-4">
-          <span>Enigma · Precise iPhone location simulation.</span>
+          <span>Enigma · Precise iPhone GPS location simulation.</span>
           <div className="flex gap-5">
+            <a href="/#games">GPS apps &amp; games</a>
             <a href="/docs">Docs</a>
             <a href="/docs/desktop-setup">Setup guide</a>
             <a href="https://github.com/bruce-shi/enigma">GitHub</a>

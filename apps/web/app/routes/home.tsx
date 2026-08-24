@@ -19,7 +19,9 @@ import {
   Upload,
   Wifi,
 } from "lucide-react";
+import type { MetaFunction } from "react-router";
 import { ButtonLink, SiteShell } from "../components/SiteShell";
+import { createPageMeta, defaultSeo, homeStructuredData } from "../seo";
 
 const repository = "https://github.com/bruce-shi/enigma";
 
@@ -60,13 +62,39 @@ const routeTools = [
   {
     icon: Pause,
     title: "Stay in control",
-    body: "Pause, resume, restart, or stop a simulation whenever your test needs a different turn.",
+    body: "Pause, resume, restart, or stop your journey whenever you want to change direction.",
   },
   {
     icon: Star,
     title: "Keep useful routes",
-    body: "Save favorites and revisit recent sessions instead of rebuilding the same test path.",
+    body: "Save favorites and revisit recent routes instead of building the same journey again.",
   },
+];
+
+const gpsUseCases = [
+  {
+    icon: Gamepad2,
+    title: "Location-based games",
+    body: "Explore location-based games from anywhere with walking, heading, route, and GPS-triggered movement under your control.",
+  },
+  {
+    icon: MapPinPlus,
+    title: "Geofences and live maps",
+    body: "Move across boundaries and coordinates deliberately to check map updates, regional content, check-ins, and other location-aware behavior.",
+  },
+  {
+    icon: Repeat2,
+    title: "Custom GPS routes",
+    body: "Replay the same GPX track and speed profile, repeat favorite journeys, and move at walking, cycling, or driving speed.",
+  },
+];
+
+export const meta: MetaFunction = () => [
+  ...createPageMeta({
+    ...defaultSeo,
+    path: "/",
+  }),
+  { "script:ld+json": homeStructuredData },
 ];
 
 export default function Home() {
@@ -76,14 +104,14 @@ export default function Home() {
         <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[.88fr_1.12fr]">
           <div>
             <p className="mb-4 text-sm font-semibold uppercase tracking-[0.18em] text-accent">
-              iPhone location simulation
+              iPhone GPS location changer
             </p>
             <h1 className="max-w-3xl text-5xl font-semibold tracking-tight md:text-7xl">
-              Put your test route in motion.
+              Change your location. Move your way.
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
-              Choose a point, draw a path, import a GPX track, or steer in real time. Enigma gives
-              you precise control of a paired iPhone from one focused map workspace.
+              Teleport to a point, draw a path, import a GPX track, or steer with a joystick. Enigma
+              puts iPhone GPS movement in your hands from one focused map workspace.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <ButtonLink className="gap-2" size="lg" to={`${repository}/releases`}>
@@ -217,7 +245,7 @@ export default function Home() {
               Four ways to move
             </p>
             <h2 className="mt-3 text-3xl font-semibold md:text-4xl">
-              Choose the control that fits the test.
+              Choose the movement mode that fits the journey.
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
               Start with a single coordinate or build a repeatable journey. Every mode stays in the
@@ -238,7 +266,36 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-6 py-20">
+      <section className="px-6 py-20" id="games">
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
+              GPS movement for apps and games
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold md:text-4xl">
+              Explore location-based experiences from anywhere.
+            </h2>
+            <p className="mt-4 max-w-2xl leading-7 text-muted-foreground">
+              Change the GPS position on a real iPhone for location-based games, geofences, live
+              maps, and route-aware apps. Save favorite places and routes, then return to them
+              whenever you like.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {gpsUseCases.map(({ icon: Icon, title, body }) => (
+              <article className="enigma-surface p-6" key={title}>
+                <span className="grid size-10 place-items-center rounded-xl bg-accent/10 text-accent">
+                  <Icon size={21} />
+                </span>
+                <h3 className="mt-4 text-lg font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-border bg-surface-secondary/35 px-6 py-20">
         <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[.82fr_1.18fr] lg:items-center">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
@@ -248,8 +305,8 @@ export default function Home() {
               Shape the movement, not just the destination.
             </h2>
             <p className="mt-5 leading-7 text-muted-foreground">
-              Enigma turns a line on the map into a controllable test session. Adjust pace and
-              repetition before you start, then react while it is running.
+              Enigma turns a line on the map into a controllable virtual journey. Adjust pace and
+              repetition before you start, then change direction while it is running.
             </p>
           </div>
           <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
@@ -300,8 +357,8 @@ export default function Home() {
               <Play className="mt-5 text-accent" size={24} />
               <h3 className="mt-4 text-lg font-semibold">Run the session</h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Start the simulation, make adjustments as you test, and restore the device when
-                done.
+                Start moving, adjust the speed or direction along the way, and restore the true
+                location when done.
               </p>
             </li>
           </ol>
@@ -344,7 +401,7 @@ export default function Home() {
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">
               Compatibility
             </p>
-            <h2 className="mt-3 text-3xl font-semibold md:text-4xl">Know the tested path.</h2>
+            <h2 className="mt-3 text-3xl font-semibold md:text-4xl">See the supported setup.</h2>
             <p className="mt-5 max-w-3xl leading-7 text-muted-foreground">
               The currently validated desktop path is macOS 12+ with a previously paired iOS 27
               device over same-LAN Wi-Fi. The Lichuang ESP32-S3 display and touch path is verified;
@@ -361,11 +418,11 @@ export default function Home() {
         <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-3">
           <article className="enigma-surface p-6 md:col-span-2">
             <History className="text-accent" size={24} />
-            <h2 className="mt-4 text-xl font-semibold">A route library built for repeat testing</h2>
+            <h2 className="mt-4 text-xl font-semibold">A route library for journeys you repeat</h2>
             <p className="mt-3 leading-7 text-muted-foreground">
               Routes, coordinates, favorites, history, and recovery state stay together on your
-              computer. The library is encrypted locally so your recurring test paths are ready for
-              the next session.
+              computer. The library is encrypted locally so your favorite journeys are ready for the
+              next session.
             </p>
           </article>
           <article className="enigma-surface p-6">
@@ -386,10 +443,10 @@ export default function Home() {
               Ready to map a route?
             </p>
             <h2 className="mt-3 max-w-2xl text-3xl font-semibold md:text-4xl">
-              Bring repeatable location testing to your iPhone.
+              Bring flexible GPS movement to your iPhone.
             </h2>
             <p className="mt-4 max-w-2xl leading-7 text-background/70">
-              Use Enigma only with devices, applications, and services you are authorized to test.
+              Use Enigma responsibly and follow the rules of any apps, games, or services you use.
             </p>
           </div>
           <ButtonLink
