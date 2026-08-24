@@ -50,6 +50,8 @@ jobs:
           key: package-${{ matrix.target }}
       - run: bun install --frozen-lockfile
       - run: bun run release:version
+      - name: Build desktop workspace dependencies
+        run: bun run build --filter='@enigma/desktop^...'
       - name: Build unsigned desktop bundle
         run: bun --filter @enigma/desktop tauri build --target ${{ matrix.target }}
       - uses: actions/upload-artifact@v4

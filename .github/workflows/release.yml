@@ -84,6 +84,8 @@ jobs:
         with:
           key: ${{ matrix.target }}
       - run: bun install --frozen-lockfile
+      - name: Build desktop workspace dependencies
+        run: bun run build --filter='@enigma/desktop^...'
       - name: Import Windows code-signing certificate
         if: runner.os == 'Windows'
         shell: pwsh
