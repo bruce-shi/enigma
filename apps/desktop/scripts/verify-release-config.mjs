@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 
 const development = process.argv.includes("--development");
-const [configuration, releaseConfiguration, capability, infoPlist] = await Promise.all([
-  readJson(new URL("../src-tauri/tauri.conf.json", import.meta.url)),
-  readJson(new URL("../src-tauri/tauri.release.conf.json", import.meta.url)),
-  readJson(new URL("../src-tauri/capabilities/default.json", import.meta.url)),
-  readFile(new URL("../src-tauri/Info.plist", import.meta.url), "utf8"),
-]);
+const [configuration, releaseConfiguration, capability, infoPlist, releaseWorkflow] =
+  await Promise.all([
+    readJson(new URL("../src-tauri/tauri.conf.json", import.meta.url)),
+    readJson(new URL("../src-tauri/tauri.release.conf.json", import.meta.url)),
+    readJson(new URL("../src-tauri/capabilities/default.json", import.meta.url)),
+    readFile(new URL("../src-tauri/Info.plist", import.meta.url), "utf8"),
+    readFile(new URL("../../../.github/workflows/release.yml", import.meta.url), "utf8"),
+  ]);
 
 const errors = [];
 if (configuration.bundle?.createUpdaterArtifacts === true) {
@@ -14,6 +16,17 @@ if (configuration.bundle?.createUpdaterArtifacts === true) {
 }
 if (releaseConfiguration.bundle?.createUpdaterArtifacts !== true) {
   errors.push("stable release overlay must create updater artifacts");
+}
+for (const target of ["app", "dmg"]) {
+  if (!releaseConfiguration.bundle?.targets?.includes(target)) {
+    errors.push(`stable macOS release bundle target is missing: ${target}`);
+  }
+}
+if (!releaseWorkflow.includes("includeUpdaterJson: true")) {
+  errors.push("stable release workflow must include updater JSON");
+}
+if (releaseWorkflow.includes("uploadUpdaterJson:")) {
+  errors.push("stable release workflow uses the obsolete uploadUpdaterJson input");
 }
 if (!configuration.bundle?.targets?.includes("dmg")) errors.push("DMG bundle target is missing");
 if (!configuration.bundle?.targets?.includes("nsis")) errors.push("NSIS bundle target is missing");
