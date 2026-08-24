@@ -13,7 +13,7 @@
     },
     "apps/desktop": {
       "name": "@enigma/desktop",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@enigma/contracts": "workspace:*",
         "@enigma/route-engine": "workspace:*",

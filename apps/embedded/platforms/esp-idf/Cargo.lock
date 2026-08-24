@@ -853,18 +853,18 @@ dependencies = [
 
 [[package]]
 name = "enigma-embedded-bridge-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sha2",
 ]
 
 [[package]]
 name = "enigma-embedded-core"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "enigma-embedded-esp-idf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "embedded-graphics",
  "embuild",
