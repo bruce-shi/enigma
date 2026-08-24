@@ -1,5 +1,7 @@
 # Enigma
 
+[**enigma.bruceshi.com**](https://enigma.bruceshi.com)
+
 Enigma is a desktop and embedded toolkit for precise iPhone location simulation. Pick
 an exact point, draw a route, steer with a joystick, or replay a GPX track from one map
 workspace. Routes can be tuned for speed, natural variation, repetition, and round
@@ -9,7 +11,6 @@ The Tauri desktop app controls a previously paired iPhone over the local network
 optional Lichuang ESP32-S3 touch controller can be provisioned by the desktop and used
 as a compact standalone interface.
 
-- [Product website](https://enigma.bruceshi.com)
 - [Getting started](https://enigma.bruceshi.com/docs)
 - [Compatibility](https://enigma.bruceshi.com/docs/compatibility)
 - [Downloads](https://github.com/bruce-shi/enigma/releases)
