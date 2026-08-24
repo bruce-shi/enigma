@@ -27,3 +27,7 @@ apps/desktop/src-tauri/gen/
 
 # Generated release evidence (templates stay tracked)
 release/generated/
+
+# Local credentials and signing exports
+.env
+*-certificate-base64.txt

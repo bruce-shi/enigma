@@ -40,7 +40,7 @@
   "plugins": {
     "updater": {
       "endpoints": ["https://github.com/bruce-shi/enigma/releases/latest/download/latest.json"],
-      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwOEQ2MEFCMEYwNjVEODYKUldTR1hRWVBxMkNOZ0t3OGJ3bFVXQjJGVGc5Q0srSWhhRHVGWVByYTJwZjhUa3pTdTdhbW52dEEK"
     }
   }
 }
