@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071018">
+  <title>Enigma location control</title>
+  <style>
+    :root { color-scheme: dark; font: 17px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; padding: max(16px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); background: #071018; color: #eef8ff; -webkit-tap-highlight-color: transparent; }
+    main { width: 100%; max-width: 560px; margin: auto; }
+    .eyebrow { color: #6fe1ff; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; }
+    h1 { margin: 5px 0 6px; font-size: clamp(27px, 8vw, 34px); line-height: 1.08; }
+    p { color: #bdd0dc; margin: 0; }
+    .page-header { padding: 4px 2px 16px; }
+    .page-header p { font-size: 15px; line-height: 1.4; }
+    .tabs { position: sticky; top: max(8px, env(safe-area-inset-top)); z-index: 2; display: flex; gap: 4px; margin-bottom: 14px; padding: 4px; overflow-x: auto; border: 1px solid #294451; border-radius: 15px; background: rgba(14, 29, 38, .96); box-shadow: 0 8px 24px rgba(0, 0, 0, .22); scrollbar-width: none; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { flex: 1 0 max-content; min-width: 62px; min-height: 42px; width: auto; margin: 0; padding: 8px 10px; border-radius: 11px; background: transparent; color: #a9bfcb; font-size: 14px; scroll-snap-align: center; }
+    .tab[aria-selected="true"] { background: #19b8df; color: #001117; box-shadow: 0 3px 10px rgba(25, 184, 223, .24); }
+    .count { display: inline-grid; min-width: 22px; height: 22px; margin-left: 5px; padding: 0 6px; place-items: center; border-radius: 999px; background: #274653; color: #dffaff; font-size: 12px; }
+    .tab[aria-selected="true"] .count { background: rgba(0, 17, 23, .18); color: #001117; }
+    .panel { padding: 18px; border: 1px solid #253f4c; border-radius: 18px; background: #0b1921; box-shadow: 0 12px 32px rgba(0, 0, 0, .18); }
+    [hidden] { display: none !important; }
+    .section-heading { margin-bottom: 16px; }
+    h2 { margin: 0; font-size: 22px; line-height: 1.2; }
+    .section-heading p { margin-top: 5px; font-size: 14px; }
+    label { display: block; margin: 15px 0 7px; font-weight: 700; }
+    input { width: 100%; min-height: 48px; border: 1px solid #36515f; border-radius: 12px; padding: 12px 13px; background: #07151d; color: #eef8ff; font: 16px/1.3 -apple-system, BlinkMacSystemFont, sans-serif; }
+    input:focus { outline: 2px solid #39c9ec; border-color: transparent; }
+    .coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .map-shell { margin: 2px 0 18px; }
+    .map-frame { position: relative; height: clamp(230px, 62vw, 330px); overflow: hidden; border: 1px solid #36515f; border-radius: 15px; background: #0a2532; box-shadow: inset 0 0 32px rgba(0, 0, 0, .3); user-select: none; }
+    .map-surface { position: absolute; inset: 0; min-height: 0; width: 100%; margin: 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; cursor: crosshair; touch-action: none; }
+    .map-surface:focus-visible { outline: 2px solid #39c9ec; outline-offset: -3px; }
+    .map-layer { position: absolute; transform-origin: 0 0; }
+    .map-layer > img { display: block; width: 100%; height: 100%; pointer-events: none; }
+    .map-detail-layer { position: absolute; inset: 0; pointer-events: none; }
+    .map-detail { position: absolute; max-width: 150px; overflow: hidden; transform: translate(-50%, -50%); border-radius: 4px; color: #f4fbff; font-weight: 700; line-height: 1; text-overflow: ellipsis; text-shadow: -1px -1px 0 #071018, 1px -1px 0 #071018, -1px 1px 0 #071018, 1px 1px 0 #071018; white-space: nowrap; }
+    .map-detail.street-name { padding: 2px 3px; transform: translate(-50%, -50%) rotate(var(--street-angle, 0deg)); transform-origin: center; background: rgba(7, 24, 32, .48); font-size: 10px; }
+    .map-detail.street-name.main-street { color: #ffe2a1; font-size: 11px; }
+    .map-detail.place-name { padding: 2px 4px; background: rgba(7, 24, 32, .64); font-size: 11px; }
+    .map-detail.city-name { padding: 3px 5px; background: rgba(7, 24, 32, .72); font-size: 14px; }
+    .map-detail.building-number { padding: 1px 2px; background: rgba(7, 24, 32, .72); color: #ffe5a3; font-size: 9px; }
+    .map-marker, .saved-pin { position: absolute; border-radius: 999px; transform: translate(-50%, -50%); pointer-events: none; }
+    .map-marker { width: 22px; height: 22px; border: 4px solid #fff; background: #19b8df; box-shadow: 0 2px 10px #001117, 0 0 0 4px rgba(25, 184, 223, .28); }
+    .saved-pin { width: 9px; height: 9px; border: 2px solid #dffaff; background: #315f6d; box-shadow: 0 1px 4px #001117; }
+    .map-controls { position: absolute; top: 10px; right: 10px; display: grid; gap: 6px; }
+    .map-readout { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); overflow: hidden; padding: 6px 9px; border-radius: 9px; background: rgba(7, 21, 29, .88); color: #dffaff; font: 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .map-help { margin: 8px 2px 0; color: #8fa6b5; font-size: 12px; line-height: 1.4; }
+    .attribution { display: inline-block; margin-top: 5px; color: #8fa6b5; font-size: 11px; }
+    button { min-height: 46px; width: 100%; border: 0; border-radius: 14px; padding: 13px 16px; margin-top: 14px; background: #19b8df; color: #001117; font: inherit; font-weight: 800; cursor: pointer; touch-action: manipulation; }
+    .map-controls button { display: grid; min-height: 44px; width: 44px; margin: 0; padding: 0; place-items: center; border: 1px solid #46606d; border-radius: 11px; background: rgba(7, 21, 29, .94); color: #eef8ff; font-size: 22px; line-height: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .28); }
+    button.secondary { background: #1c2b35; color: #eef8ff; }
+    button.restore { border: 1px solid #36515f; background: transparent; color: #bdd0dc; }
+    button:disabled { opacity: .45; }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    #status { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #26543a; border-radius: 12px; background: #10291c; color: #80e69e; font-size: 15px; font-weight: 700; }
+    #status.error { border-color: #673838; background: #2b1719; color: #ff8a8a; }
+    details { margin-top: 16px; padding-top: 14px; border-top: 1px solid #253b47; color: #9eb3bf; }
+    summary { min-height: 44px; padding: 9px 2px; color: #c2d4de; font-weight: 700; cursor: pointer; }
+    details p { margin-top: 7px; font-size: 14px; }
+    .stored { min-height: 180px; }
+    .stored-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .stored-header button { min-height: 42px; width: auto; margin: 0; padding: 8px 13px; }
+    .location-list { display: grid; gap: 12px; margin-top: 16px; }
+    .list-heading { margin: 20px 0 0; font-size: 17px; }
+    .list-heading:first-of-type { margin-top: 16px; }
+    .list-description { margin-top: 4px; font-size: 13px; }
+    .location-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid #2c4654; border-radius: 14px; background: #07151d; }
+    .location-card strong, .location-card small { display: block; overflow-wrap: anywhere; }
+    .location-card small { margin-top: 3px; color: #8fa6b5; }
+    .location-actions { display: flex; gap: 7px; }
+    .location-card button { min-width: 62px; width: auto; margin: 0; padding: 10px 12px; }
+    .empty { color: #8fa6b5; padding: 14px 0; }
+    .connection-card { margin: 16px 0; padding: 14px; border: 1px solid #2c4654; border-radius: 14px; background: #07151d; }
+    .connection-card h3 { margin: 0; font-size: 17px; }
+    .connection-card p { margin-top: 5px; font-size: 13px; }
+    .city-download { margin: 16px 0; padding: 14px; border: 1px solid #315464; border-radius: 14px; background: #0b202a; }
+    .city-download h3 { margin: 0; font-size: 17px; }
+    .city-download p { margin-top: 5px; font-size: 13px; }
+    .map-list { display: grid; gap: 10px; margin-top: 16px; }
+    .map-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid #2c4654; border-radius: 14px; background: #07151d; }
+    .map-card strong, .map-card small { display: block; }
+    .map-card small { margin-top: 3px; color: #8fa6b5; }
+    .map-card button { width: auto; margin: 0; padding: 9px 12px; }
+    .map-card .active-map { color: #80e69e; font-weight: 700; }
+    @media (max-width: 390px) {
+      body { padding-left: 12px; padding-right: 12px; }
+      .panel { padding: 15px; }
+      .coordinates { grid-template-columns: 1fr; gap: 0; }
+      .location-card { grid-template-columns: 1fr; }
+      .map-card { grid-template-columns: 1fr; }
+      .map-card button { width: 100%; }
+      .location-actions button { width: 100%; }
+      .action-grid { grid-template-columns: 1fr; gap: 0; }
+    }
+  </style>
+</head>
+<body><main>
+  <header class="page-header">
+    <div class="eyebrow">Enigma board</div>
+    <h1>Location control</h1>
+    <p>Save this iPhone's position or activate a location already stored on the board.</p>
+  </header>
+  <div class="tabs" role="tablist" aria-label="Location sections">
+    <button type="button" id="new-tab" class="tab" role="tab" aria-selected="true" aria-controls="new-panel">New</button>
+    <button type="button" id="saved-tab" class="tab" role="tab" aria-selected="false" aria-controls="saved-panel" tabindex="-1">Places <span id="saved-count" class="count" hidden>0</span></button>
+    <button type="button" id="maps-tab" class="tab" role="tab" aria-selected="false" aria-controls="maps-panel" tabindex="-1">Maps</button>
+    <button type="button" id="wifi-tab" class="tab" role="tab" aria-selected="false" aria-controls="wifi-panel" tabindex="-1">Wi-Fi</button>
+  </div>
+  <div id="status" role="status" aria-live="polite" hidden></div>
+  <section id="new-panel" class="panel" role="tabpanel" aria-labelledby="new-tab">
+    <div class="section-heading"><h2>Choose a location</h2><p>Tap the active city map, pinch with two fingers to zoom, capture GPS, or enter exact coordinates.</p></div>
+    <div class="map-shell">
+      <section id="map-frame" class="map-frame" aria-label="Offline city map">
+        <button type="button" id="map-surface" class="map-surface" aria-label="Choose a point on the offline city map. Drag to pan, pinch with two fingers to zoom, or use the adjacent zoom controls.">
+          <span id="map-layer" class="map-layer">
+            <img src="/offline-map.svg" alt="" draggable="false">
+            <span id="map-details" class="map-detail-layer"></span>
+            <span id="saved-pins"></span>
+            <span id="map-marker" class="map-marker" hidden></span>
+          </span>
+          <output id="map-readout" class="map-readout">Tap the map to choose a point</output>
+        </button>
+        <div class="map-controls" role="toolbar" aria-label="Map controls">
+          <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+          <button type="button" id="center-map" aria-label="Center selected location">&#9678;</button>
+        </div>
+      </section>
+      <p id="map-help" class="map-help">Vancouver and Richmond are stored on the board with offline street and building-number details. Drag to pan or pinch with two fingers to zoom. Open City maps to switch or install another city.</p>
+      <a class="attribution" href="https://www.openstreetmap.org/copyright" rel="external">© OpenStreetMap contributors · ODbL</a>
+    </div>
+    <form id="location-form">
+      <label for="name">Location name</label>
+      <input id="name" name="name" maxlength="64" value="Current location" autocomplete="off" required>
+      <div class="coordinates">
+        <div><label for="latitude">Latitude</label><input id="latitude" name="latitude" inputmode="decimal" readonly required></div>
+        <div><label for="longitude">Longitude</label><input id="longitude" name="longitude" inputmode="decimal" readonly required></div>
+      </div>
+      <button type="button" id="capture">Use my current location</button>
+      <div class="action-grid">
+        <button type="submit" id="save" class="secondary" disabled>Save to board</button>
+        <button type="button" id="set-now" disabled>Set on iPhone</button>
+      </div>
+    </form>
+    <button type="button" id="restore" class="restore">Restore real GPS</button>
+    <details><summary>Enter coordinates manually</summary><p>If Location Services are unavailable, unlock the coordinate fields and enter decimal degrees.</p><button type="button" id="manual" class="secondary">Unlock fields</button></details>
+  </section>
+  <section id="saved-panel" class="panel stored" role="tabpanel" aria-labelledby="saved-tab" hidden>
+    <div class="stored-header"><h2 id="stored-heading">Board locations</h2><button type="button" id="reload" class="secondary">Refresh</button></div>
+    <h3 class="list-heading">Saved</h3>
+    <div id="locations" class="location-list" aria-live="polite"><div class="empty">Loading from board...</div></div>
+    <h3 class="list-heading">Predefined</h3>
+    <p class="list-description">Built into this board. Select one to view it on the map or set it on the iPhone.</p>
+    <div id="presets" class="location-list" aria-live="polite"><div class="empty">Loading from board...</div></div>
+  </section>
+  <section id="maps-panel" class="panel" role="tabpanel" aria-labelledby="maps-tab" hidden>
+    <div class="section-heading"><h2>Offline city maps</h2><p id="map-summary">Loading map storage...</p></div>
+    <div class="city-download">
+      <h3>Download another city</h3>
+      <p>Enter a city and country for the best match. Downloading replaces the previously downloaded city; bundled Vancouver and Richmond remain available.</p>
+      <form id="city-form">
+        <label for="city-query">City</label>
+        <input id="city-query" name="city" maxlength="96" placeholder="Seattle, USA" autocomplete="off" required>
+        <button type="submit" id="city-download" disabled>Generate and download map</button>
+        <button type="button" id="open-wifi" class="secondary">Wi-Fi settings</button>
+      </form>
+    </div>
+    <div id="map-list" class="map-list" aria-live="polite"><div class="empty">Loading stored maps...</div></div>
+  </section>
+  <section id="wifi-panel" class="panel" role="tabpanel" aria-labelledby="wifi-tab" hidden>
+    <div class="section-heading"><h2>Connect board to Wi-Fi</h2><p>Keep the Enigma hotspot running while the board joins another network.</p></div>
+    <div class="connection-card">
+      <h3>Upstream internet connection</h3>
+      <p id="wifi-summary">The Enigma hotspot stays available and shares internet access after the board joins your Wi-Fi.</p>
+      <form id="wifi-form">
+        <label for="wifi-ssid">Wi-Fi name</label>
+        <input id="wifi-ssid" name="ssid" maxlength="32" autocomplete="off" required>
+        <label for="wifi-password">Wi-Fi password</label>
+        <input id="wifi-password" name="password" type="password" maxlength="63" autocomplete="current-password">
+        <button type="submit" id="wifi-connect">Connect board</button>
+      </form>
+      <p>Your iPhone can keep using Enigma-XXXX for normal internet access after the connection succeeds. Connecting can briefly move the hotspot to another channel. This firmware stores upstream Wi-Fi credentials in the board's unencrypted local NVS.</p>
+    </div>
+  </section>
+</main>
+<script src="/location-portal.js"></script>
+</body>
+</html>

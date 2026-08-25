@@ -23,8 +23,9 @@ removed commercial/backend prototype; those services are not part of Enigma's ru
 - The Lichuang ESP32-S3 ST7789 display and FT5x06 touch UI are physically verified.
 - The embedded Wi-Fi/iPhone runtime is build-verified and still needs a complete
   physical set/move/restore acceptance pass.
-- USB runtime control, Windows runtime control, and iOS versions outside the exact
-  tested matrix remain unqualified.
+- USB runtime control and all discovered iOS versions are software-enabled; USB and
+  versions outside the exact tested matrix still need physical acceptance. Windows
+  runtime control remains deferred.
 
 ## Release acceptance
 

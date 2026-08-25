@@ -31,11 +31,13 @@ remote_component = { name = "espressif/mdns", version = "1.2" }
 
 [dependencies]
 embedded-graphics = "0.7.1"
+embedded-svc = "0.29"
 enigma-embedded-bridge-protocol = { path = "../../bridge-protocol" }
 enigma-embedded-core = { path = "../../core" }
 esp-idf-svc = { version = "0.52.1", features = ["critical-section"] }
 idevice = { git = "https://github.com/jkcoxson/idevice.git", rev = "63a341d7f624b5c1f2540e4cecb269151a2caf52", default-features = false, features = ["core_device_proxy", "dvt", "location_simulation", "remote_pairing", "rsd", "rustcrypto", "tcp", "tunnel_tcp_stack"] }
 log = "0.4"
+sha2 = { version = "0.10", default-features = false }
 tokio = { version = "1", default-features = false, features = ["io-util", "net", "rt", "sync", "time"] }
 
 [build-dependencies]

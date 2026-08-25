@@ -22,9 +22,10 @@ combinations before relying on Enigma for a test plan.
    [GitHub Releases](https://github.com/bruce-shi/enigma/releases).
 2. Connect and unlock the iPhone, approve **Trust This Computer**, and enable Developer
    Mode if the iOS build requires it.
-3. Open Enigma, scan devices, and enable desktop Wi-Fi on the USB device entry.
-4. Put the Mac and iPhone on the same LAN, disconnect USB, then scan and connect again.
-5. Add a Mapbox public token in **Settings**, pick a point, and test **Set** followed by
+3. Open Enigma, scan devices, and connect to the ready USB device entry. To use Wi-Fi,
+   enable desktop Wi-Fi first, put both devices on the same LAN, disconnect USB, then
+   scan and connect again.
+4. Add a Mapbox public token in **Settings**, pick a point, and test **Set** followed by
    **Restore** before running a route.
 
 The [desktop setup guide](desktop-setup.md) covers Mapbox maps, place search, road

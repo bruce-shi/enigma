@@ -35,6 +35,10 @@ pub struct DeviceSummary {
 }
 
 impl DeviceSummary {
+    pub fn is_runtime_candidate(&self) -> bool {
+        self.state == DeviceState::Ready
+    }
+
     pub fn is_same_lan_wifi_candidate(&self) -> bool {
         self.transport == DeviceTransport::Network
     }
@@ -44,7 +48,7 @@ impl DeviceSummary {
             && self
                 .os_version
                 .as_deref()
-                .is_some_and(|version| version.starts_with("27."))
+                .is_some_and(|version| version == "27" || version.starts_with("27."))
     }
 }
 
@@ -196,10 +200,24 @@ mod tests {
     }
 
     #[test]
+    fn accepts_ready_usb_and_network_devices_for_runtime_regardless_of_version() {
+        assert!(device(DeviceTransport::Usb, Some("27.0")).is_runtime_candidate());
+        assert!(device(DeviceTransport::Usb, Some("26.5.2")).is_runtime_candidate());
+        assert!(device(DeviceTransport::Network, Some("18.7.10")).is_runtime_candidate());
+        assert!(device(DeviceTransport::Network, None).is_runtime_candidate());
+
+        let mut untrusted = device(DeviceTransport::Usb, Some("27.0"));
+        untrusted.state = DeviceState::NeedsTrust;
+        assert!(!untrusted.is_runtime_candidate());
+    }
+
+    #[test]
     fn tracks_the_physically_validated_same_lan_path_separately() {
+        assert!(device(DeviceTransport::Network, Some("27")).is_validated_same_lan());
         assert!(device(DeviceTransport::Network, Some("27.0")).is_validated_same_lan());
         assert!(!device(DeviceTransport::Usb, Some("27.0")).is_validated_same_lan());
         assert!(!device(DeviceTransport::Network, Some("26.5.2")).is_validated_same_lan());
+        assert!(!device(DeviceTransport::Network, Some("270")).is_validated_same_lan());
         assert!(!device(DeviceTransport::Network, None).is_validated_same_lan());
     }
 

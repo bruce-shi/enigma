@@ -11,9 +11,11 @@ import { createErrorMeta, createPageMeta, defaultSeo, homeStructuredData, siteOr
 
 describe("public website", () => {
   it("exports the landing page and nested documentation routes", () => {
-    expect(routes).toHaveLength(2);
+    expect(routes).toHaveLength(5);
     expect(JSON.stringify(routes)).toMatch(/docs-page|:slug/u);
-    expect(JSON.stringify(routes)).not.toMatch(/api|account|auth|dashboard|pricing/u);
+    expect(JSON.stringify(routes)).toMatch(/api\/city-map\.svg|city-map-svg/u);
+    expect(JSON.stringify(routes)).toMatch(/api\/city-map\.json|api\/city-map\.pack/u);
+    expect(JSON.stringify(routes)).not.toMatch(/account|auth|dashboard|pricing/u);
   });
 
   it("declares no application bindings or observability", async () => {

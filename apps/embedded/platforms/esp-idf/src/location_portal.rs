@@ -3,11 +3,11 @@
 use std::{
     error::Error,
     fmt::Write as FmtWrite,
-    io::ErrorKind,
-    net::{Ipv4Addr, UdpSocket},
+    io::{self, ErrorKind},
+    net::{IpAddr, Ipv4Addr, UdpSocket},
     str,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc::{Receiver, SyncSender, TrySendError, sync_channel},
     },
@@ -25,13 +25,17 @@ use esp_idf_svc::{
     tls::X509,
 };
 
+use crate::{city_maps::CityMapStore, wifi_access::WifiStatus};
+
 pub const HOSTNAME: &str = "enigma.test";
 pub const HTTPS_URL: &str = "https://enigma.test";
 const HTTPS_ORIGIN: &str = "https://enigma.test";
 const HTTPS_IP_ORIGIN: &str = "https://192.168.71.1";
 const MAX_FORM_BYTES: usize = 512;
 const LIST_TIMEOUT: Duration = Duration::from_secs(10);
-const ACTION_TIMEOUT: Duration = Duration::from_secs(60);
+const ACTION_TIMEOUT: Duration = Duration::from_secs(210);
+const DNS_PACKET_BYTES: usize = 4_096;
+const DNS_UPSTREAM_TIMEOUT: Duration = Duration::from_millis(1_500);
 
 const SERVER_CERTIFICATE: &[u8] =
     concat!(include_str!("../assets/location-portal-server.crt"), "\0").as_bytes();
@@ -39,6 +43,9 @@ const SERVER_PRIVATE_KEY: &[u8] =
     concat!(include_str!("../assets/location-portal-server.key"), "\0").as_bytes();
 const CA_CERTIFICATE: &[u8] = include_bytes!("../assets/location-portal-ca.crt");
 const IOS_TRUST_PROFILE: &[u8] = include_bytes!("../assets/enigma-location-portal.mobileconfig");
+const LOCATION_PORTAL_SCRIPT: &[u8] = include_bytes!("../assets/location-portal.js");
+
+pub type SharedCityMaps = Arc<Mutex<CityMapStore>>;
 
 const SECURITY_HEADERS: [(&str, &str); 5] = [
     ("Content-Type", "text/html; charset=utf-8"),
@@ -47,7 +54,7 @@ const SECURITY_HEADERS: [(&str, &str); 5] = [
     ("Referrer-Policy", "no-referrer"),
     (
         "Content-Security-Policy",
-        "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     ),
 ];
 
@@ -88,264 +95,16 @@ const ONBOARDING_PAGE: &str = r##"<!doctype html>
 </main></body>
 </html>"##;
 
-const LOCATION_PAGE: &str = r##"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#071018">
-  <title>Enigma location control</title>
-  <style>
-    :root { color-scheme: dark; font: 17px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
-    * { box-sizing: border-box; }
-    body { min-height: 100vh; margin: 0; padding: max(16px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); background: #071018; color: #eef8ff; -webkit-tap-highlight-color: transparent; }
-    main { width: 100%; max-width: 560px; margin: auto; }
-    .eyebrow { color: #6fe1ff; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; }
-    h1 { margin: 5px 0 6px; font-size: clamp(27px, 8vw, 34px); line-height: 1.08; }
-    p { color: #bdd0dc; margin: 0; }
-    .page-header { padding: 4px 2px 16px; }
-    .page-header p { font-size: 15px; line-height: 1.4; }
-    .tabs { position: sticky; top: max(8px, env(safe-area-inset-top)); z-index: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 14px; padding: 4px; border: 1px solid #294451; border-radius: 15px; background: rgba(14, 29, 38, .96); box-shadow: 0 8px 24px rgba(0, 0, 0, .22); }
-    .tab { min-height: 46px; width: 100%; margin: 0; padding: 10px 12px; border-radius: 11px; background: transparent; color: #a9bfcb; }
-    .tab[aria-selected="true"] { background: #19b8df; color: #001117; box-shadow: 0 3px 10px rgba(25, 184, 223, .24); }
-    .count { display: inline-grid; min-width: 22px; height: 22px; margin-left: 5px; padding: 0 6px; place-items: center; border-radius: 999px; background: #274653; color: #dffaff; font-size: 12px; }
-    .tab[aria-selected="true"] .count { background: rgba(0, 17, 23, .18); color: #001117; }
-    .panel { padding: 18px; border: 1px solid #253f4c; border-radius: 18px; background: #0b1921; box-shadow: 0 12px 32px rgba(0, 0, 0, .18); }
-    [hidden] { display: none !important; }
-    .section-heading { margin-bottom: 16px; }
-    h2 { margin: 0; font-size: 22px; line-height: 1.2; }
-    .section-heading p { margin-top: 5px; font-size: 14px; }
-    label { display: block; margin: 15px 0 7px; font-weight: 700; }
-    input { width: 100%; min-height: 48px; border: 1px solid #36515f; border-radius: 12px; padding: 12px 13px; background: #07151d; color: #eef8ff; font: 16px/1.3 -apple-system, BlinkMacSystemFont, sans-serif; }
-    input:focus { outline: 2px solid #39c9ec; border-color: transparent; }
-    .coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    button { min-height: 46px; width: 100%; border: 0; border-radius: 14px; padding: 13px 16px; margin-top: 14px; background: #19b8df; color: #001117; font: inherit; font-weight: 800; cursor: pointer; touch-action: manipulation; }
-    button.secondary { background: #1c2b35; color: #eef8ff; }
-    button:disabled { opacity: .45; }
-    #status { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #26543a; border-radius: 12px; background: #10291c; color: #80e69e; font-size: 15px; font-weight: 700; }
-    #status.error { border-color: #673838; background: #2b1719; color: #ff8a8a; }
-    details { margin-top: 16px; padding-top: 14px; border-top: 1px solid #253b47; color: #9eb3bf; }
-    summary { min-height: 44px; padding: 9px 2px; color: #c2d4de; font-weight: 700; cursor: pointer; }
-    details p { margin-top: 7px; font-size: 14px; }
-    .stored { min-height: 180px; }
-    .stored-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .stored-header button { min-height: 42px; width: auto; margin: 0; padding: 8px 13px; }
-    .location-list { display: grid; gap: 12px; margin-top: 16px; }
-    .location-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid #2c4654; border-radius: 14px; background: #07151d; }
-    .location-card strong, .location-card small { display: block; overflow-wrap: anywhere; }
-    .location-card small { margin-top: 3px; color: #8fa6b5; }
-    .location-card button { min-width: 66px; width: auto; margin: 0; padding: 10px 14px; }
-    .empty { color: #8fa6b5; padding: 14px 0; }
-    @media (max-width: 390px) {
-      body { padding-left: 12px; padding-right: 12px; }
-      .panel { padding: 15px; }
-      .coordinates { grid-template-columns: 1fr; gap: 0; }
-      .location-card { grid-template-columns: 1fr; }
-      .location-card button { width: 100%; }
-    }
-  </style>
-</head>
-<body><main>
-  <header class="page-header">
-    <div class="eyebrow">Enigma board</div>
-    <h1>Location control</h1>
-    <p>Save this iPhone's position or activate a location already stored on the board.</p>
-  </header>
-  <nav class="tabs" role="tablist" aria-label="Location sections">
-    <button type="button" id="new-tab" class="tab" role="tab" aria-selected="true" aria-controls="new-panel">New location</button>
-    <button type="button" id="saved-tab" class="tab" role="tab" aria-selected="false" aria-controls="saved-panel" tabindex="-1">Saved <span id="saved-count" class="count" hidden>0</span></button>
-  </nav>
-  <div id="status" role="status" aria-live="polite" hidden></div>
-  <section id="new-panel" class="panel" role="tabpanel" aria-labelledby="new-tab">
-    <div class="section-heading"><h2>Add a location</h2><p>Capture GPS, choose a name, then save it to the board.</p></div>
-    <form id="location-form">
-      <label for="name">Location name</label>
-      <input id="name" name="name" maxlength="64" value="Current location" autocomplete="off" required>
-      <div class="coordinates">
-        <div><label for="latitude">Latitude</label><input id="latitude" name="latitude" inputmode="decimal" readonly required></div>
-        <div><label for="longitude">Longitude</label><input id="longitude" name="longitude" inputmode="decimal" readonly required></div>
-      </div>
-      <button type="button" id="capture">Use my current location</button>
-      <button type="submit" id="save" class="secondary" disabled>Save to board</button>
-    </form>
-    <details><summary>Enter coordinates manually</summary><p>If Location Services are unavailable, unlock the coordinate fields and enter decimal degrees.</p><button type="button" id="manual" class="secondary">Unlock fields</button></details>
-  </section>
-  <section id="saved-panel" class="panel stored" role="tabpanel" aria-labelledby="saved-tab" hidden>
-    <div class="stored-header"><h2 id="stored-heading">Stored locations</h2><button type="button" id="reload" class="secondary">Refresh</button></div>
-    <div id="locations" class="location-list" aria-live="polite"><div class="empty">Loading from board...</div></div>
-  </section>
-</main>
-<script>
-(() => {
-  const form = document.querySelector('#location-form');
-  const name = document.querySelector('#name');
-  const latitude = document.querySelector('#latitude');
-  const longitude = document.querySelector('#longitude');
-  const capture = document.querySelector('#capture');
-  const save = document.querySelector('#save');
-  const manual = document.querySelector('#manual');
-  const reload = document.querySelector('#reload');
-  const locations = document.querySelector('#locations');
-  const status = document.querySelector('#status');
-  const savedCount = document.querySelector('#saved-count');
-  const tabs = [...document.querySelectorAll('[role="tab"]')];
-  const selectPanel = (panelId, focus = false) => {
-    tabs.forEach((tab) => {
-      const selected = tab.getAttribute('aria-controls') === panelId;
-      tab.setAttribute('aria-selected', String(selected));
-      tab.tabIndex = selected ? 0 : -1;
-      document.querySelector(`#${tab.getAttribute('aria-controls')}`).hidden = !selected;
-      if (selected && focus) tab.focus();
-    });
-  };
-  tabs.forEach((tab, index) => {
-    tab.addEventListener('click', () => selectPanel(tab.getAttribute('aria-controls')));
-    tab.addEventListener('keydown', (event) => {
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      event.preventDefault();
-      const offset = event.key === 'ArrowRight' ? 1 : tabs.length - 1;
-      const next = tabs[(index + offset) % tabs.length];
-      selectPanel(next.getAttribute('aria-controls'), true);
-    });
-  });
-  const show = (message, error = false) => {
-    status.textContent = message;
-    status.hidden = !message;
-    status.classList.toggle('error', error);
-  };
-  const coordinatesReady = () => {
-    const lat = Number(latitude.value), lon = Number(longitude.value);
-    return latitude.value !== '' && longitude.value !== '' && Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
-  };
-  const refresh = () => { save.disabled = !coordinatesReady() || !name.value.trim(); };
-  const locationBody = (location) => new URLSearchParams({ name: location.name, latitude: location.latitude, longitude: location.longitude });
+const LOCATION_PAGE: &str = include_str!("../assets/location-portal.html");
 
-  const loadLocations = async () => {
-    reload.disabled = true;
-    try {
-      const response = await fetch('/api/locations', { cache: 'no-store' });
-      if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
-      const payload = await response.json();
-      savedCount.textContent = payload.locations.length;
-      savedCount.hidden = false;
-      locations.replaceChildren();
-      if (!payload.locations.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty';
-        empty.textContent = 'No stored locations yet. Capture and save one above.';
-        locations.append(empty);
-        return;
-      }
-      payload.locations.forEach((location) => {
-        const card = document.createElement('div');
-        card.className = 'location-card';
-        const details = document.createElement('div');
-        const title = document.createElement('strong');
-        title.textContent = location.name;
-        const coordinates = document.createElement('small');
-        coordinates.textContent = `${location.latitude}, ${location.longitude}`;
-        details.append(title, coordinates);
-        const set = document.createElement('button');
-        set.type = 'button';
-        set.textContent = 'Set';
-        set.addEventListener('click', async () => {
-          set.disabled = true;
-          show(`Setting ${location.name} on the iPhone...`);
-          try {
-            const response = await fetch('/api/set-location', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-              body: locationBody(location)
-            });
-            const message = await response.text();
-            if (!response.ok) throw new Error(message || `HTTP ${response.status}`);
-            show(message);
-            await loadLocations();
-          } catch (error) {
-            show(`Set failed: ${error.message}`, true);
-          } finally {
-            set.disabled = false;
-          }
-        });
-        card.append(details, set);
-        locations.append(card);
-      });
-    } catch (error) {
-      locations.replaceChildren();
-      const empty = document.createElement('div');
-      empty.className = 'empty';
-      empty.textContent = `Could not load stored locations: ${error.message}`;
-      locations.append(empty);
-    } finally {
-      reload.disabled = false;
-    }
-  };
-
-  capture.addEventListener('click', () => {
-    if (!window.isSecureContext || !navigator.geolocation) {
-      show('Location access needs the trusted HTTPS portal. Finish the certificate setup, then reload.', true);
-      return;
-    }
-    capture.disabled = true;
-    show('Getting a precise GPS fix...');
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        latitude.value = coords.latitude.toFixed(6);
-        longitude.value = coords.longitude.toFixed(6);
-        capture.disabled = false;
-        refresh();
-        show(`Location captured (accuracy about ${Math.round(coords.accuracy)} m).`);
-      },
-      (error) => {
-        capture.disabled = false;
-        const hint = error.code === 1 ? 'Allow location access for enigma.test in Safari settings.' : 'Move somewhere with a clearer GPS signal and try again.';
-        show(`Could not get the current location. ${hint}`, true);
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-    );
-  });
-
-  manual.addEventListener('click', () => {
-    latitude.readOnly = false;
-    longitude.readOnly = false;
-    latitude.focus();
-    show('Coordinate fields unlocked. Use decimal degrees.');
-  });
-  [name, latitude, longitude].forEach((input) => input.addEventListener('input', refresh));
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    refresh();
-    if (save.disabled) { show('Capture or enter valid coordinates first.', true); return; }
-    save.disabled = true;
-    show('Saving to the board...');
-    try {
-      const response = await fetch('/api/locations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: locationBody({ name: name.value.trim(), latitude: latitude.value.trim(), longitude: longitude.value.trim() })
-      });
-      const message = await response.text();
-      if (!response.ok) throw new Error(message || `HTTP ${response.status}`);
-      show(message);
-      await loadLocations();
-      selectPanel('saved-panel');
-    } catch (error) {
-      show(`Save failed: ${error.message}`, true);
-    } finally {
-      refresh();
-    }
-  });
-  reload.addEventListener('click', loadLocations);
-  loadLocations();
-})();
-</script>
-</body>
-</html>"##;
+pub struct PortalLocationList {
+    pub saved: Vec<Location>,
+    pub presets: Vec<Location>,
+}
 
 pub enum PortalRequest {
     List {
-        reply: SyncSender<Vec<Location>>,
+        reply: SyncSender<PortalLocationList>,
     },
     Save {
         location: Location,
@@ -353,6 +112,18 @@ pub enum PortalRequest {
     },
     Set {
         location: Location,
+        reply: SyncSender<Outcome>,
+    },
+    Restore {
+        reply: SyncSender<Outcome>,
+    },
+    ConnectWifi {
+        ssid: String,
+        password: String,
+        reply: SyncSender<Outcome>,
+    },
+    InstallMap {
+        city_query: String,
         reply: SyncSender<Outcome>,
     },
 }
@@ -371,13 +142,19 @@ pub struct LocationPortal {
 }
 
 impl LocationPortal {
-    pub fn start(address: Ipv4Addr) -> Result<(Self, Receiver<PortalRequest>), Box<dyn Error>> {
+    pub fn start(
+        address: Ipv4Addr,
+        city_maps: SharedCityMaps,
+        wifi_status: WifiStatus,
+    ) -> Result<(Self, Receiver<PortalRequest>), Box<dyn Error>> {
         let (request_sender, request_receiver) = sync_channel::<PortalRequest>(2);
 
         let mut http = EspHttpServer::new(&Configuration {
             http_port: 80,
             ctrl_port: 32_768,
+            max_open_sockets: 2,
             max_uri_handlers: 3,
+            session_timeout: Duration::from_secs(30),
             uri_match_wildcard: true,
             stack_size: 8_192,
             ..Default::default()
@@ -429,7 +206,9 @@ impl LocationPortal {
         let mut https = EspHttpServer::new(&Configuration {
             https_port: 443,
             ctrl_port: 32_769,
-            max_uri_handlers: 4,
+            max_open_sockets: 4,
+            max_uri_handlers: 12,
+            session_timeout: Duration::from_secs(30),
             stack_size: 12_288,
             server_certificate: Some(X509::pem_until_nul(SERVER_CERTIFICATE)),
             private_key: Some(X509::pem_until_nul(SERVER_PRIVATE_KEY)),
@@ -444,6 +223,60 @@ impl LocationPortal {
                 LOCATION_PAGE.as_bytes(),
             )
         })?;
+        let map_asset = city_maps.clone();
+        https.fn_handler("/offline-map.svg", Method::Get, move |request| {
+            let payload = match map_asset.lock() {
+                Ok(store) => store.active_bytes().to_vec(),
+                Err(_) => {
+                    return send_text(request, 503, "Service Unavailable", "Map storage is busy");
+                }
+            };
+            send_bytes(
+                request,
+                200,
+                "OK",
+                &[
+                    ("Content-Type", "image/svg+xml"),
+                    ("Cache-Control", "no-store"),
+                    ("X-Content-Type-Options", "nosniff"),
+                ],
+                &payload,
+            )
+        })?;
+        let map_details = city_maps.clone();
+        https.fn_handler("/offline-map.json", Method::Get, move |request| {
+            let payload = match map_details.lock() {
+                Ok(store) => store.active_details().to_vec(),
+                Err(_) => {
+                    return send_text(request, 503, "Service Unavailable", "Map storage is busy");
+                }
+            };
+            send_bytes(
+                request,
+                200,
+                "OK",
+                &[
+                    ("Content-Type", "application/json; charset=utf-8"),
+                    ("Content-Encoding", "gzip"),
+                    ("Cache-Control", "no-store"),
+                    ("X-Content-Type-Options", "nosniff"),
+                ],
+                &payload,
+            )
+        })?;
+        https.fn_handler("/location-portal.js", Method::Get, |request| {
+            send_bytes(
+                request,
+                200,
+                "OK",
+                &[
+                    ("Content-Type", "text/javascript; charset=utf-8"),
+                    ("Cache-Control", "no-store"),
+                    ("X-Content-Type-Options", "nosniff"),
+                ],
+                LOCATION_PORTAL_SCRIPT,
+            )
+        })?;
         let list_sender = request_sender.clone();
         https.fn_handler("/api/locations", Method::Get, move |request| {
             handle_location_list(request, &list_sender)
@@ -452,11 +285,32 @@ impl LocationPortal {
         https.fn_handler("/api/locations", Method::Post, move |request| {
             handle_location_post(request, &save_sender, PortalAction::Save)
         })?;
+        let set_sender = request_sender.clone();
         https.fn_handler("/api/set-location", Method::Post, move |request| {
-            handle_location_post(request, &request_sender, PortalAction::Set)
+            handle_location_post(request, &set_sender, PortalAction::Set)
+        })?;
+        let restore_sender = request_sender.clone();
+        https.fn_handler("/api/restore-location", Method::Post, move |request| {
+            handle_restore(request, &restore_sender)
+        })?;
+        let map_status = city_maps.clone();
+        let dns_status = wifi_status.clone();
+        https.fn_handler("/api/maps", Method::Get, move |request| {
+            handle_map_status(request, &map_status, &wifi_status)
+        })?;
+        let wifi_sender = request_sender.clone();
+        https.fn_handler("/api/wifi", Method::Post, move |request| {
+            handle_wifi_connect(request, &wifi_sender)
+        })?;
+        let install_sender = request_sender.clone();
+        https.fn_handler("/api/maps/install", Method::Post, move |request| {
+            handle_map_install(request, &install_sender)
+        })?;
+        https.fn_handler("/api/maps/activate", Method::Post, move |request| {
+            handle_map_activate(request, &city_maps)
         })?;
 
-        let dns = DnsRedirect::start(address)?;
+        let dns = DnsRedirect::start(address, dns_status)?;
         log::info!(
             "location portal ready: onboarding http://{HOSTNAME}, secure portal {HTTPS_URL}"
         );
@@ -625,20 +479,374 @@ fn handle_location_post(
     }
 }
 
-fn locations_json(locations: &[Location]) -> String {
-    let mut json = String::from("{\"locations\":[");
+fn handle_restore(
+    request: Request<&mut EspHttpConnection<'_>>,
+    sender: &SyncSender<PortalRequest>,
+) -> Result<(), EspIOError> {
+    if !request
+        .header("Origin")
+        .is_some_and(|origin| origin == HTTPS_ORIGIN || origin == HTTPS_IP_ORIGIN)
+    {
+        return send_text(request, 403, "Forbidden", "Cross-origin action rejected");
+    }
+
+    let (reply_sender, reply_receiver) = sync_channel(1);
+    match sender.try_send(PortalRequest::Restore {
+        reply: reply_sender,
+    }) {
+        Ok(()) => {}
+        Err(TrySendError::Full(_)) => {
+            return send_text(
+                request,
+                503,
+                "Service Unavailable",
+                "Board is busy; try again",
+            );
+        }
+        Err(TrySendError::Disconnected(_)) => {
+            return send_text(
+                request,
+                503,
+                "Service Unavailable",
+                "Location control is offline",
+            );
+        }
+    }
+    match reply_receiver.recv_timeout(ACTION_TIMEOUT) {
+        Ok(outcome) if outcome.success => send_text(request, 200, "OK", &outcome.message),
+        Ok(outcome) => send_text(request, 422, "Unprocessable Content", &outcome.message),
+        Err(_) => send_text(
+            request,
+            504,
+            "Gateway Timeout",
+            "Board did not restore real GPS; check its display",
+        ),
+    }
+}
+
+fn handle_map_status(
+    request: Request<&mut EspHttpConnection<'_>>,
+    city_maps: &SharedCityMaps,
+    wifi_status: &WifiStatus,
+) -> Result<(), EspIOError> {
+    let store = match city_maps.lock() {
+        Ok(store) => store,
+        Err(_) => return send_text(request, 503, "Service Unavailable", "Map storage is busy"),
+    };
+    let active = store.active_definition();
+    let connected_ssid = wifi_status.connected_ssid();
+    let mut json = String::from("{\"active\":");
+    push_map_json(&mut json, &active);
+    json.push_str(",\"wifi\":{\"connected\":");
+    json.push_str(if connected_ssid.is_some() {
+        "true"
+    } else {
+        "false"
+    });
+    json.push_str(",\"ssid\":");
+    if let Some(ssid) = connected_ssid {
+        push_json_string(&mut json, &ssid);
+    } else {
+        json.push_str("null");
+    }
+    json.push_str(",\"internetRelayed\":");
+    json.push_str(if wifi_status.internet_relayed() {
+        "true"
+    } else {
+        "false"
+    });
+    json.push_str("},\"maps\":[");
+    for (index, status) in store.status().into_iter().enumerate() {
+        if index > 0 {
+            json.push(',');
+        }
+        json.push('{');
+        json.push_str("\"map\":");
+        push_map_json(&mut json, &status.map);
+        let _ = write!(
+            json,
+            ",\"installed\":{},\"active\":{}",
+            status.installed, status.active
+        );
+        json.push('}');
+    }
+    json.push_str("]}");
+    send_bytes(
+        request,
+        200,
+        "OK",
+        &[
+            ("Content-Type", "application/json; charset=utf-8"),
+            ("Cache-Control", "no-store"),
+            ("X-Content-Type-Options", "nosniff"),
+        ],
+        json.as_bytes(),
+    )
+}
+
+fn handle_wifi_connect(
+    mut request: Request<&mut EspHttpConnection<'_>>,
+    sender: &SyncSender<PortalRequest>,
+) -> Result<(), EspIOError> {
+    let fields = match read_action_form(&mut request) {
+        Ok(fields) => fields,
+        Err(error) => return send_text(request, error.status, error.message, &error.body),
+    };
+    let ssid = match form_field(&fields, "ssid", 32, false) {
+        Ok(value) => value,
+        Err(message) => return send_text(request, 422, "Unprocessable Content", &message),
+    };
+    let password = match form_field(&fields, "password", 63, true) {
+        Ok(value) => value,
+        Err(message) => return send_text(request, 422, "Unprocessable Content", &message),
+    };
+    let (reply, receiver) = sync_channel(1);
+    send_action_request(
+        request,
+        sender,
+        PortalRequest::ConnectWifi {
+            ssid,
+            password,
+            reply,
+        },
+        receiver,
+        "Wi-Fi connection did not finish; reconnect to the Enigma hotspot and refresh",
+    )
+}
+
+fn handle_map_install(
+    mut request: Request<&mut EspHttpConnection<'_>>,
+    sender: &SyncSender<PortalRequest>,
+) -> Result<(), EspIOError> {
+    let fields = match read_action_form(&mut request) {
+        Ok(fields) => fields,
+        Err(error) => return send_text(request, error.status, error.message, &error.body),
+    };
+    let city_query = match form_field(&fields, "city", 96, false) {
+        Ok(value) => value,
+        Err(message) => return send_text(request, 422, "Unprocessable Content", &message),
+    };
+    let (reply, receiver) = sync_channel(1);
+    send_action_request(
+        request,
+        sender,
+        PortalRequest::InstallMap { city_query, reply },
+        receiver,
+        "City-map download did not finish",
+    )
+}
+
+fn handle_map_activate(
+    mut request: Request<&mut EspHttpConnection<'_>>,
+    city_maps: &SharedCityMaps,
+) -> Result<(), EspIOError> {
+    let fields = match read_action_form(&mut request) {
+        Ok(fields) => fields,
+        Err(error) => return send_text(request, error.status, error.message, &error.body),
+    };
+    let city_id = match form_field(&fields, "city", 31, false) {
+        Ok(value) => value,
+        Err(message) => return send_text(request, 422, "Unprocessable Content", &message),
+    };
+    match city_maps.lock() {
+        Ok(mut store) => match store.activate(&city_id) {
+            Ok(message) => send_text(request, 200, "OK", &message),
+            Err(message) => send_text(request, 422, "Unprocessable Content", &message),
+        },
+        Err(_) => send_text(request, 503, "Service Unavailable", "Map storage is busy"),
+    }
+}
+
+fn send_action_request(
+    request: Request<&mut EspHttpConnection<'_>>,
+    sender: &SyncSender<PortalRequest>,
+    action: PortalRequest,
+    receiver: Receiver<Outcome>,
+    timeout_message: &str,
+) -> Result<(), EspIOError> {
+    match sender.try_send(action) {
+        Ok(()) => {}
+        Err(TrySendError::Full(_)) => {
+            return send_text(
+                request,
+                503,
+                "Service Unavailable",
+                "Board is busy; try again",
+            );
+        }
+        Err(TrySendError::Disconnected(_)) => {
+            return send_text(
+                request,
+                503,
+                "Service Unavailable",
+                "Board controls are offline",
+            );
+        }
+    }
+    match receiver.recv_timeout(ACTION_TIMEOUT) {
+        Ok(outcome) if outcome.success => send_text(request, 200, "OK", &outcome.message),
+        Ok(outcome) => send_text(request, 422, "Unprocessable Content", &outcome.message),
+        Err(_) => send_text(request, 504, "Gateway Timeout", timeout_message),
+    }
+}
+
+struct FormError {
+    status: u16,
+    message: &'static str,
+    body: String,
+}
+
+fn read_action_form(
+    request: &mut Request<&mut EspHttpConnection<'_>>,
+) -> Result<Vec<(String, String)>, FormError> {
+    if !request
+        .header("Origin")
+        .is_some_and(|origin| origin == HTTPS_ORIGIN || origin == HTTPS_IP_ORIGIN)
+    {
+        return Err(FormError {
+            status: 403,
+            message: "Forbidden",
+            body: String::from("Cross-origin action rejected"),
+        });
+    }
+    if !request
+        .header("Content-Type")
+        .is_some_and(|value| value.starts_with("application/x-www-form-urlencoded"))
+    {
+        return Err(FormError {
+            status: 415,
+            message: "Unsupported Media Type",
+            body: String::from("Expected a URL-encoded form"),
+        });
+    }
+    let Some(content_length) = request
+        .header("Content-Length")
+        .and_then(|value| value.parse::<usize>().ok())
+    else {
+        return Err(FormError {
+            status: 411,
+            message: "Length Required",
+            body: String::from("Missing Content-Length"),
+        });
+    };
+    if content_length == 0 || content_length > MAX_FORM_BYTES {
+        return Err(FormError {
+            status: 413,
+            message: "Payload Too Large",
+            body: String::from("Invalid form size"),
+        });
+    }
+    let mut body = vec![0u8; content_length];
+    let mut received = 0;
+    while received < content_length {
+        let count = request
+            .read(&mut body[received..])
+            .map_err(|error| FormError {
+                status: 400,
+                message: "Bad Request",
+                body: format!("Could not read form: {error}"),
+            })?;
+        if count == 0 {
+            break;
+        }
+        received += count;
+    }
+    if received != content_length {
+        return Err(FormError {
+            status: 400,
+            message: "Bad Request",
+            body: String::from("Incomplete form body"),
+        });
+    }
+    let form = str::from_utf8(&body).map_err(|_| FormError {
+        status: 400,
+        message: "Bad Request",
+        body: String::from("Form is not valid UTF-8"),
+    })?;
+    let mut fields = Vec::new();
+    for pair in form.split('&') {
+        let (key, value) = pair.split_once('=').ok_or_else(|| FormError {
+            status: 400,
+            message: "Bad Request",
+            body: String::from("Malformed form field"),
+        })?;
+        let key = decode_form_component(key).map_err(|body| FormError {
+            status: 400,
+            message: "Bad Request",
+            body,
+        })?;
+        let value = decode_form_component(value).map_err(|body| FormError {
+            status: 400,
+            message: "Bad Request",
+            body,
+        })?;
+        fields.push((key, value));
+    }
+    Ok(fields)
+}
+
+fn form_field(
+    fields: &[(String, String)],
+    key: &str,
+    maximum_bytes: usize,
+    allow_empty: bool,
+) -> Result<String, String> {
+    let mut matches = fields.iter().filter(|(candidate, _)| candidate == key);
+    let value = matches
+        .next()
+        .map(|(_, value)| value.clone())
+        .ok_or_else(|| format!("Missing {key}"))?;
+    if matches.next().is_some() {
+        return Err(format!("Duplicate {key}"));
+    }
+    if (!allow_empty && value.is_empty()) || value.len() > maximum_bytes || value.contains('\0') {
+        return Err(format!("Invalid {key}"));
+    }
+    Ok(value)
+}
+
+fn push_map_json(json: &mut String, map: &crate::city_maps::CityMapDefinition) {
+    json.push_str("{\"id\":");
+    push_json_string(json, &map.id);
+    json.push_str(",\"name\":");
+    push_json_string(json, &map.name);
+    let _ = write!(
+        json,
+        ",\"bounds\":{{\"west\":{},\"south\":{},\"east\":{},\"north\":{}}},\"width\":{},\"height\":{},\"bytes\":{},\"svgBytes\":{},\"detailBytes\":{},\"detailUncompressedBytes\":{},\"bundled\":{} }}",
+        map.west,
+        map.south,
+        map.east,
+        map.north,
+        map.width,
+        map.height,
+        map.bytes,
+        map.svg_bytes,
+        map.detail_bytes,
+        map.detail_uncompressed_bytes,
+        map.bundled
+    );
+}
+
+fn push_locations_json(json: &mut String, locations: &[Location]) {
     for (index, location) in locations.iter().enumerate() {
         if index > 0 {
             json.push(',');
         }
         json.push_str("{\"name\":");
-        push_json_string(&mut json, &location.name);
+        push_json_string(json, &location.name);
         json.push_str(",\"latitude\":");
-        push_json_string(&mut json, &location.latitude);
+        push_json_string(json, &location.latitude);
         json.push_str(",\"longitude\":");
-        push_json_string(&mut json, &location.longitude);
+        push_json_string(json, &location.longitude);
         json.push('}');
     }
+}
+
+fn locations_json(locations: &PortalLocationList) -> String {
+    let mut json = String::from("{\"locations\":[");
+    push_locations_json(&mut json, &locations.saved);
+    json.push_str("],\"presets\":[");
+    push_locations_json(&mut json, &locations.presets);
     json.push_str("]}");
     json
 }
@@ -778,15 +986,20 @@ struct DnsRedirect {
 }
 
 impl DnsRedirect {
-    fn start(address: Ipv4Addr) -> Result<Self, Box<dyn Error>> {
-        let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 53))?;
+    fn start(address: Ipv4Addr, status: WifiStatus) -> Result<Self, Box<dyn Error>> {
+        // Listen only on the board AP so joining a LAN never exposes an open
+        // DNS proxy through the station interface.
+        let socket = UdpSocket::bind((address, 53))?;
         socket.set_read_timeout(Some(Duration::from_millis(250)))?;
+        let upstream_socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+        upstream_socket.set_read_timeout(Some(DNS_UPSTREAM_TIMEOUT))?;
+        upstream_socket.set_write_timeout(Some(DNS_UPSTREAM_TIMEOUT))?;
         let running = Arc::new(AtomicBool::new(true));
         let worker_running = running.clone();
         let worker = thread::Builder::new()
             .name(String::from("enigma-dns"))
-            .stack_size(6_144)
-            .spawn(move || dns_loop(socket, address, worker_running))?;
+            .stack_size(8_192)
+            .spawn(move || dns_loop(socket, upstream_socket, address, status, worker_running))?;
         Ok(Self {
             running,
             worker: Some(worker),
@@ -803,15 +1016,40 @@ impl Drop for DnsRedirect {
     }
 }
 
-fn dns_loop(socket: UdpSocket, address: Ipv4Addr, running: Arc<AtomicBool>) {
-    let mut query = [0u8; 512];
+fn dns_loop(
+    socket: UdpSocket,
+    upstream_socket: UdpSocket,
+    address: Ipv4Addr,
+    status: WifiStatus,
+    running: Arc<AtomicBool>,
+) {
+    let mut query = vec![0u8; DNS_PACKET_BYTES];
     while running.load(Ordering::Acquire) {
         match socket.recv_from(&mut query) {
             Ok((length, peer)) => {
-                if let Some(response) = dns_response(&query[..length], address)
-                    && let Err(error) = socket.send_to(&response, peer)
-                {
-                    log::warn!("hotspot DNS response failed: {error}");
+                let query = &query[..length];
+                if let Some(question) = parse_dns_question(query) {
+                    let response = if is_local_name(&question.name) {
+                        local_dns_response(query, &question, address, false)
+                    } else if let Some(upstream_dns) = status.upstream_dns() {
+                        match forward_dns(&upstream_socket, query, upstream_dns) {
+                            Ok(response) => response,
+                            Err(error) => {
+                                log::warn!(
+                                    "upstream DNS {upstream_dns} failed for {}: {error}",
+                                    question.name
+                                );
+                                dns_error_response(query, question.question_end, 2)
+                            }
+                        }
+                    } else {
+                        // Until upstream Wi-Fi is configured, keep the hotspot
+                        // discoverable through iOS captive-network behavior.
+                        local_dns_response(query, &question, address, true)
+                    };
+                    if let Err(error) = socket.send_to(&response, peer) {
+                        log::warn!("hotspot DNS response failed: {error}");
+                    }
                 }
             }
             Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
@@ -825,12 +1063,20 @@ fn dns_loop(socket: UdpSocket, address: Ipv4Addr, running: Arc<AtomicBool>) {
     }
 }
 
-fn dns_response(query: &[u8], address: Ipv4Addr) -> Option<Vec<u8>> {
+struct DnsQuestion {
+    question_end: usize,
+    name: String,
+    query_type: u16,
+    query_class: u16,
+}
+
+fn parse_dns_question(query: &[u8]) -> Option<DnsQuestion> {
     if query.len() < 17 || query[2] & 0x80 != 0 || u16::from_be_bytes([query[4], query[5]]) != 1 {
         return None;
     }
 
     let mut cursor = 12;
+    let mut name = String::new();
     loop {
         let label_length = *query.get(cursor)? as usize;
         cursor += 1;
@@ -840,6 +1086,15 @@ fn dns_response(query: &[u8], address: Ipv4Addr) -> Option<Vec<u8>> {
         if label_length > 63 || cursor.checked_add(label_length)? > query.len() {
             return None;
         }
+        let label = str::from_utf8(&query[cursor..cursor + label_length]).ok()?;
+        if !name.is_empty() {
+            name.push('.');
+        }
+        name.extend(
+            label
+                .chars()
+                .map(|character| character.to_ascii_lowercase()),
+        );
         cursor += label_length;
     }
     let question_end = cursor.checked_add(4)?;
@@ -848,17 +1103,40 @@ fn dns_response(query: &[u8], address: Ipv4Addr) -> Option<Vec<u8>> {
     }
     let query_type = u16::from_be_bytes([query[cursor], query[cursor + 1]]);
     let query_class = u16::from_be_bytes([query[cursor + 2], query[cursor + 3]]);
-    let answer = query_class == 1 && matches!(query_type, 1 | 255);
+    Some(DnsQuestion {
+        question_end,
+        name,
+        query_type,
+        query_class,
+    })
+}
 
-    let mut response = Vec::with_capacity(question_end + usize::from(answer) * 16);
+fn is_local_name(name: &str) -> bool {
+    name == HOSTNAME
+        || name
+            .strip_suffix(HOSTNAME)
+            .is_some_and(|prefix| prefix.ends_with('.'))
+}
+
+fn local_dns_response(
+    query: &[u8],
+    question: &DnsQuestion,
+    address: Ipv4Addr,
+    wildcard: bool,
+) -> Vec<u8> {
+    let answer = question.query_class == 1
+        && matches!(question.query_type, 1 | 255)
+        && (wildcard || is_local_name(&question.name));
+
+    let mut response = Vec::with_capacity(question.question_end + usize::from(answer) * 16);
     response.extend_from_slice(&query[0..2]);
     response.push(0x84 | (query[2] & 0x01));
-    response.push(0x00);
+    response.push(0x80);
     response.extend_from_slice(&1u16.to_be_bytes());
     response.extend_from_slice(&u16::from(answer).to_be_bytes());
     response.extend_from_slice(&0u16.to_be_bytes());
     response.extend_from_slice(&0u16.to_be_bytes());
-    response.extend_from_slice(&query[12..question_end]);
+    response.extend_from_slice(&query[12..question.question_end]);
     if answer {
         response.extend_from_slice(&[0xc0, 0x0c]);
         response.extend_from_slice(&1u16.to_be_bytes());
@@ -867,5 +1145,34 @@ fn dns_response(query: &[u8], address: Ipv4Addr) -> Option<Vec<u8>> {
         response.extend_from_slice(&4u16.to_be_bytes());
         response.extend_from_slice(&address.octets());
     }
-    Some(response)
+    response
+}
+
+fn forward_dns(socket: &UdpSocket, query: &[u8], upstream_dns: Ipv4Addr) -> io::Result<Vec<u8>> {
+    socket.send_to(query, (upstream_dns, 53))?;
+    let mut response = vec![0u8; DNS_PACKET_BYTES];
+    for _ in 0..4 {
+        let (length, peer) = socket.recv_from(&mut response)?;
+        if peer.ip() == IpAddr::V4(upstream_dns) && length >= 2 && response[..2] == query[..2] {
+            response.truncate(length);
+            return Ok(response);
+        }
+    }
+    Err(io::Error::new(
+        ErrorKind::TimedOut,
+        "no matching upstream DNS response",
+    ))
+}
+
+fn dns_error_response(query: &[u8], question_end: usize, response_code: u8) -> Vec<u8> {
+    let mut response = Vec::with_capacity(question_end);
+    response.extend_from_slice(&query[0..2]);
+    response.push(0x80 | (query[2] & 0x01));
+    response.push(0x80 | (response_code & 0x0f));
+    response.extend_from_slice(&1u16.to_be_bytes());
+    response.extend_from_slice(&0u16.to_be_bytes());
+    response.extend_from_slice(&0u16.to_be_bytes());
+    response.extend_from_slice(&0u16.to_be_bytes());
+    response.extend_from_slice(&query[12..question_end]);
+    response
 }

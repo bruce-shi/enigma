@@ -3,9 +3,8 @@
 use std::error::Error;
 
 use enigma_embedded_core::{Location, LocationBackend};
-use esp_idf_svc::nvs::EspDefaultNvsPartition;
 
-use crate::{iphone, location_store::LocationStore};
+use crate::{iphone, location_store::LocationStore, persistent_storage::PersistentNvsPartition};
 
 pub struct EspIdfBackend {
     pairing_storage: iphone::PairingStorage,
@@ -15,7 +14,7 @@ pub struct EspIdfBackend {
 
 impl EspIdfBackend {
     pub fn new(
-        partition: EspDefaultNvsPartition,
+        partition: PersistentNvsPartition,
         clear_pairing: bool,
     ) -> Result<Self, Box<dyn Error>> {
         let pairing_storage = iphone::pairing_storage(partition.clone())?;
@@ -28,10 +27,6 @@ impl EspIdfBackend {
             location_store,
             controller: None,
         })
-    }
-
-    pub fn catalog(&self) -> Result<Vec<Location>, Box<dyn Error>> {
-        self.location_store.catalog()
     }
 
     pub fn saved_locations(&self) -> Result<Vec<Location>, Box<dyn Error>> {

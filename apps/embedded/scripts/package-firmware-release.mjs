@@ -75,7 +75,7 @@ await cp(sourceElf, elf);
 
 await writeFile(
   flashingInstructions,
-  `# Flash Enigma firmware\n\nThis bundle targets the Lichuang ESP32-S3 board. Install espflash 4.5.0 or newer, connect the board over USB, and run this command from the extracted bundle directory:\n\n\`\`\`sh\nespflash write-bin 0x0 ${mergedImageName}\n\`\`\`\n\nThe merged image contains the bootloader, partition table, and Enigma application at their required offsets. Verify the ZIP against the separately published \`.zip.sha256\` file before extracting it.\n`,
+  `# Flash Enigma firmware\n\nThis bundle targets the Lichuang ESP32-S3 board. Install espflash 4.5.0 or newer, connect the board over USB, and run this command from the extracted bundle directory:\n\n\`\`\`sh\nespflash write-bin 0x0 ${mergedImageName}\n\`\`\`\n\nThe merged image contains the bootloader, partition table, and Enigma application at their required offsets. Pairing, upstream Wi-Fi, saved locations, and active-map state live in a separate userdata partition beyond the image and survive this command. A full-chip erase still removes them. Verify the ZIP against the separately published \`.zip.sha256\` file before extracting it.\n`,
 );
 
 const manifest = await createFirmwareManifest({

@@ -49,6 +49,7 @@ import { MapView } from "./MapView";
 import { mapboxAccessTokenConfigured } from "./mapbox-access-token";
 import { MAX_MAPBOX_WAYPOINTS, requestMapboxRoute } from "./mapbox-directions";
 import { SettingsPage } from "./SettingsPage";
+import { type EditorMode, shouldSyncSnapshotPoint } from "./simulation-point-sync";
 import { desktopApi, type LocalPlanRecord, type SavedPlanKind } from "./tauri";
 import {
   checkForDesktopUpdate,
@@ -68,7 +69,6 @@ import {
   suggestedSpeedKph,
 } from "./workflows";
 
-type EditorMode = "teleport" | "route" | "joystick" | "gpx";
 type SidebarTab = "devices" | "library";
 type ProvisioningStatus = {
   tone: "pending" | "success" | "error";
@@ -258,17 +258,24 @@ export function App() {
   }, [mapboxAccessToken, mode, routeWaypoints, routingProfile]);
 
   useEffect(() => {
+    let active = true;
     const timer = window.setInterval(() => {
       void desktopApi
         .getSimulationSnapshot()
         .then((next) => {
+          if (!active) return;
           setSnapshot(next);
-          if (next.point) setPoint(next.point);
+          if (next.point && shouldSyncSnapshotPoint(next.state, activeMode, mode)) {
+            setPoint(next.point);
+          }
         })
         .catch(() => undefined);
     }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [activeMode, mode]);
 
   useEffect(() => {
     let unlisten: undefined | (() => void);
@@ -393,7 +400,7 @@ export function App() {
 
   const startCurrent = useCallback(async () => {
     if (!selected) {
-      setError("Select a ready iPhone connected over Wi-Fi before starting a simulation");
+      setError("Select a ready iPhone before starting a simulation");
       return;
     }
     if (!currentPlan) {
@@ -407,7 +414,10 @@ export function App() {
     if (!(await runAction(() => desktopApi.startSimulation(currentPlan)))) return;
     setActiveMode(mode);
     setDirtySession(true);
-    setSnapshot((current) => ({ ...current, state: "running" }));
+    setSnapshot((current) => ({
+      ...current,
+      state: mode === "teleport" ? "restore_required" : "running",
+    }));
     await refreshLibrary();
   }, [currentPlan, mode, refreshLibrary, runAction, selected]);
 
@@ -752,7 +762,7 @@ export function App() {
     <AppShell
       context={
         selected
-          ? `${selected.name} · ${selected.transport === "network" ? "Wi-Fi beta" : "USB unqualified"}`
+          ? `${selected.name} · ${selected.transport === "network" ? "Wi-Fi beta" : "USB"}`
           : "macOS · local access"
       }
       navigation={
@@ -833,7 +843,9 @@ export function App() {
                   <div className="mb-4 flex items-start gap-3 rounded-xl bg-success/10 p-3 text-success">
                     <CircleCheck aria-hidden className="mt-0.5 shrink-0" size={18} />
                     <div>
-                      <p className="text-sm font-semibold">Connected over Wi-Fi</p>
+                      <p className="text-sm font-semibold">
+                        Connected over {selected.transport === "network" ? "Wi-Fi" : "USB"}
+                      </p>
                       <p className="mt-0.5 text-xs text-success/80">
                         {selected.name} is ready. Choose a location and movement mode.
                       </p>
@@ -876,10 +888,12 @@ export function App() {
                   <div className="grid gap-2">
                     {devices.map((device) => {
                       const validated =
-                        device.transport === "network" && device.osVersion?.startsWith("27.");
+                        device.transport === "network" &&
+                        (device.osVersion === "27" || device.osVersion?.startsWith("27."));
                       const wifiAvailable = device.transport === "network";
-                      const selectable = wifiAvailable && device.state === "ready";
+                      const selectable = device.state === "ready";
                       const connected = selected?.id === device.id;
+                      const transportLabel = wifiAvailable ? "Wi-Fi" : "USB";
                       return (
                         <div
                           className={`rounded-xl border p-3 text-left transition-colors ${connected ? "border-success bg-success/5 ring-2 ring-success/20" : "border-border bg-surface"}`}
@@ -887,52 +901,64 @@ export function App() {
                         >
                           <DeviceStatus {...device} />
                           <p
-                            className={`mt-2 text-xs ${wifiAvailable ? "text-success" : "text-warning"} ${connected ? "font-medium" : ""}`}
+                            className={`mt-2 text-xs ${selectable ? "text-success" : "text-warning"} ${connected ? "font-medium" : ""}`}
                           >
                             {connected
-                              ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · connected over Wi-Fi`
+                              ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · connected over ${transportLabel}`
                               : validated
                                 ? `Validated same-LAN path · iOS ${device.osVersion}`
                                 : wifiAvailable
                                   ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · Wi-Fi beta available`
                                   : device.transport === "usb"
-                                    ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · initial provisioning source`
+                                    ? `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · USB available`
                                     : `${device.osVersion ? `iOS ${device.osVersion}` : "Unknown iOS"} · unavailable`}
                           </p>
-                          {connected ? (
-                            <div
-                              aria-label={`${device.name} connected over Wi-Fi`}
-                              className="mt-3 flex min-h-8 w-full items-center justify-center gap-2 rounded-full bg-success/15 px-3 text-sm font-semibold text-success"
-                              role="status"
-                            >
-                              <CircleCheck aria-hidden size={16} /> Connected
-                            </div>
-                          ) : selectable ? (
-                            <Button
-                              className="mt-3 w-full"
-                              isDisabled={busy}
-                              onPress={() => void connect(device.id)}
-                              size="sm"
-                            >
-                              <Wifi size={15} />{" "}
-                              {selected ? "Switch to this iPhone" : "Connect over Wi-Fi"}
-                            </Button>
-                          ) : device.transport === "usb" && device.state === "ready" ? (
-                            <div className="mt-3 grid gap-2">
+                          {device.state === "ready" ? (
+                            <div className="mt-3 grid grid-cols-2 gap-1.5">
+                              {connected ? (
+                                <div
+                                  aria-label={`${device.name} connected over ${transportLabel}`}
+                                  className="flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-full bg-success/15 px-2 text-xs font-semibold text-success"
+                                  role="status"
+                                >
+                                  <CircleCheck aria-hidden size={14} /> Connected
+                                </div>
+                              ) : (
+                                <Button
+                                  aria-label={
+                                    selected
+                                      ? `Switch to ${device.name}`
+                                      : `Connect over ${transportLabel}`
+                                  }
+                                  className="h-8 min-h-8 min-w-0 w-full px-2 text-xs"
+                                  isDisabled={busy}
+                                  onPress={() => void connect(device.id)}
+                                  size="sm"
+                                >
+                                  {wifiAvailable ? <Wifi size={14} /> : <Cable size={14} />}
+                                  {selected ? "Switch iPhone" : `Connect ${transportLabel}`}
+                                </Button>
+                              )}
+                              {device.transport === "usb" ? (
+                                <Button
+                                  aria-label="Enable desktop Wi-Fi"
+                                  className="h-8 min-h-8 min-w-0 w-full px-2 text-xs"
+                                  isDisabled={busy}
+                                  onPress={() => void enableDesktopWifi(device.id)}
+                                  size="sm"
+                                >
+                                  {provisioningStatus?.tone === "pending" &&
+                                  provisioningStatus.operation === "desktop" ? (
+                                    <LoaderCircle className="animate-spin" size={14} />
+                                  ) : (
+                                    <Wifi size={14} />
+                                  )}
+                                  Desktop Wi-Fi
+                                </Button>
+                              ) : null}
                               <Button
-                                isDisabled={busy}
-                                onPress={() => void enableDesktopWifi(device.id)}
-                                size="sm"
-                              >
-                                {provisioningStatus?.tone === "pending" &&
-                                provisioningStatus.operation === "desktop" ? (
-                                  <LoaderCircle className="animate-spin" size={15} />
-                                ) : (
-                                  <Wifi size={15} />
-                                )}
-                                Enable desktop Wi-Fi
-                              </Button>
-                              <Button
+                                aria-label="Provision embedded board"
+                                className="h-8 min-h-8 min-w-0 w-full px-2 text-xs"
                                 isDisabled={busy}
                                 onPress={() => void provisionBoard(device.id)}
                                 size="sm"
@@ -940,11 +966,11 @@ export function App() {
                               >
                                 {provisioningStatus?.tone === "pending" &&
                                 provisioningStatus.operation === "board" ? (
-                                  <LoaderCircle className="animate-spin" size={15} />
+                                  <LoaderCircle className="animate-spin" size={14} />
                                 ) : (
-                                  <Cable size={15} />
+                                  <Cable size={14} />
                                 )}
-                                Provision embedded board
+                                Provision board
                               </Button>
                             </div>
                           ) : null}

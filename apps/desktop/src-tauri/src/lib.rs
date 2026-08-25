@@ -447,7 +447,7 @@ fn diagnostics_document(
             "networkDeviceCount": network_device_count,
             "qualifiedNetworkDeviceCount": qualified_network_device_count,
             "usbDeviceCount": usb_device_count,
-            "usbQualification": "deferred",
+            "usbQualification": "software_enabled_physical_acceptance_pending",
             "scanErrorCode": scan_error
         },
         "containsLocationData": false,

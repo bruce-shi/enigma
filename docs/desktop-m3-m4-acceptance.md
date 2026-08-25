@@ -1,8 +1,8 @@
 # M3-M4 macOS + iOS 27 Acceptance
 
 Use only the qualified path: macOS, a previously USB-paired iPhone running iOS 27,
-Developer Mode enabled, unlocked, and on the same LAN. USB and Windows are not part
-of this pass.
+Developer Mode enabled, unlocked, and on the same LAN. USB is available but is not
+part of this particular acceptance pass; Windows remains deferred.
 
 ## Launch
 
@@ -16,7 +16,8 @@ error, stop and use **Restore** before continuing.
 ## M3 — Desktop Core
 
 - [ ] The device appears as `Validated same-LAN path` and can be selected.
-- [ ] An iOS 26, unknown-version, or USB entry is visibly unqualified and disabled.
+- [ ] iOS 26, unknown-version, and USB entries remain selectable and are not labeled as
+      the validated same-LAN path.
 - [ ] **Center on this Mac** recenters after the macOS permission prompt.
 - [ ] Type a full `latitude, longitude` value one character at a time; editing remains
       stable and Enter normalizes it to six decimal places.

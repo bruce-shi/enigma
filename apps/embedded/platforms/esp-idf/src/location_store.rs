@@ -2,8 +2,10 @@
 
 use std::{error::Error, str};
 
-use enigma_embedded_core::{Location, merge_catalog};
-use esp_idf_svc::nvs::{EspDefaultNvsPartition, EspKeyValueStorage, EspNvs, NvsDefault};
+use enigma_embedded_core::Location;
+use esp_idf_svc::nvs::{EspKeyValueStorage, EspNvs, NvsCustom};
+
+use crate::persistent_storage::PersistentNvsPartition;
 
 const HISTORY_KEYS: [&str; 6] = [
     "recent0", "recent1", "recent2", "recent3", "recent4", "recent5",
@@ -13,20 +15,15 @@ const RECORD_BYTES: usize = 128;
 const FIELD_SEPARATOR: char = '\u{1f}';
 
 pub struct LocationStore {
-    storage: EspKeyValueStorage<NvsDefault>,
+    storage: EspKeyValueStorage<NvsCustom>,
 }
 
 impl LocationStore {
-    pub fn new(partition: EspDefaultNvsPartition) -> Result<Self, Box<dyn Error>> {
+    pub fn new(partition: PersistentNvsPartition) -> Result<Self, Box<dyn Error>> {
         let nvs = EspNvs::new(partition, "locations", true)?;
         Ok(Self {
             storage: EspKeyValueStorage::new(nvs),
         })
-    }
-
-    /// Returns saved recent locations first, followed by built-in presets.
-    pub fn catalog(&self) -> Result<Vec<Location>, Box<dyn Error>> {
-        Ok(merge_catalog(self.saved_locations()?))
     }
 
     pub fn saved_locations(&self) -> Result<Vec<Location>, Box<dyn Error>> {

@@ -821,9 +821,11 @@ dependencies = [
  "embedded-io-async 0.7.0",
  "enumset",
  "heapless 0.9.3",
+ "log",
  "num_enum",
  "serde",
  "strum 0.27.2",
+ "strum_macros 0.27.2",
 ]
 
 [[package]]
@@ -867,12 +869,14 @@ name = "enigma-embedded-esp-idf"
 version = "0.1.1"
 dependencies = [
  "embedded-graphics",
+ "embedded-svc",
  "embuild",
  "enigma-embedded-bridge-protocol",
  "enigma-embedded-core",
  "esp-idf-svc",
  "idevice",
  "log",
+ "sha2",
  "tokio",
 ]
 
@@ -883,6 +887,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc5801fd11762e24d1e420d01d2ac518f2a2ca4329d4fbb6639f2412b6204e0"
 dependencies = [
  "enumset_derive",
+ "serde",
 ]
 
 [[package]]
@@ -1271,6 +1276,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
 dependencies = [
  "hash32",
+ "serde_core",
  "stable_deref_trait",
 ]
 

@@ -76,7 +76,7 @@ impl SimulationController {
                 self.device.set_location(point).await?;
                 self.active.store(true, Ordering::SeqCst);
                 *self.snapshot.write().await = SimulationSnapshot {
-                    state: SimulationState::Running,
+                    state: SimulationState::RestoreRequired,
                     point: Some(point),
                     progress: 1.0,
                     elapsed_ms: 0,
@@ -391,6 +391,36 @@ mod tests {
             update_interval_ms: 1000,
             natural_variation_seed: None,
         }
+    }
+
+    #[tokio::test]
+    async fn teleport_can_replace_the_active_location_without_restoring_first() {
+        let device = Arc::new(FakeDevice::default());
+        let controller = SimulationController::with_device(device.clone());
+        let first = origin();
+        let second = Coordinate {
+            latitude: first.latitude + 0.01,
+            longitude: first.longitude + 0.01,
+            ..first
+        };
+
+        controller
+            .start(SimulationPlan::Teleport { point: first })
+            .await
+            .unwrap();
+        assert_eq!(
+            controller.snapshot().await.state,
+            SimulationState::RestoreRequired
+        );
+
+        controller
+            .start(SimulationPlan::Teleport { point: second })
+            .await
+            .unwrap();
+        let snapshot = controller.snapshot().await;
+        assert_eq!(snapshot.state, SimulationState::RestoreRequired);
+        assert_eq!(snapshot.point, Some(second));
+        assert_eq!(*device.points.lock().unwrap(), vec![first, second]);
     }
 
     #[tokio::test]

@@ -45,7 +45,7 @@ const browserPreviewDevices: DeviceSummary[] = [
   },
   {
     id: "browser-preview-usb",
-    name: "Unqualified USB preview",
+    name: "USB preview iPhone",
     model: "iPhone",
     osVersion: "27.0",
     transport: "usb",
@@ -81,7 +81,7 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
       return mockSnapshot as T;
     case "set_location":
       mockSnapshot = {
-        state: "running",
+        state: "restore_required",
         point: args?.point as Coordinate,
         progress: 1,
         elapsedMs: 0,
@@ -95,7 +95,12 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
           : plan.kind === "joystick"
             ? plan.origin
             : plan.points[0];
-      mockSnapshot = { state: "running", point, progress: 0, elapsedMs: 0 };
+      mockSnapshot = {
+        state: plan.kind === "teleport" ? "restore_required" : "running",
+        point,
+        progress: plan.kind === "teleport" ? 1 : 0,
+        elapsedMs: 0,
+      };
       mockHistory.unshift({
         id: crypto.randomUUID(),
         name: plan.kind === "gpx" ? "GPX route" : plan.kind === "path" ? "Route" : plan.kind,

@@ -27,8 +27,10 @@ use esp_idf_svc::{
 
 use super::{Hardware, display, lcd::LcdDisplay, shared_i2c};
 use crate::{
-    location_portal::{LocationPortal, PortalRequest},
+    city_maps::CityMapStore,
+    location_portal::{LocationPortal, PortalLocationList, PortalRequest},
     location_store::MAX_SAVED_LOCATIONS,
+    persistent_storage::PersistentNvsPartition,
     wifi_access::WifiAccessPoint,
 };
 
@@ -52,8 +54,11 @@ const PIN_KEY_GAP: i32 = 3;
 
 pub fn run<F>(
     hardware: Hardware,
+    partition: PersistentNvsPartition,
+    clear_sensitive_data: bool,
     mut catalog: Vec<Location>,
     mut saved_locations: Vec<Location>,
+    preset_locations: Vec<Location>,
     mut handle: F,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -76,10 +81,16 @@ where
         scl,
         boot_button,
     } = hardware;
-    let access_point = WifiAccessPoint::start(modem)
+    let map_nvs = partition.clone();
+    let mut access_point = WifiAccessPoint::start(modem, partition, clear_sensitive_data)
         .map_err(|error| io::Error::other(format!("Wi-Fi access point failed: {error}")))?;
-    let (location_portal, portal_requests) = LocationPortal::start(access_point.address())
-        .map_err(|error| io::Error::other(format!("location portal failed: {error}")))?;
+    let city_maps = std::sync::Arc::new(std::sync::Mutex::new(CityMapStore::open(map_nvs)?));
+    let (location_portal, portal_requests) = LocationPortal::start(
+        access_point.address(),
+        city_maps.clone(),
+        access_point.status(),
+    )
+    .map_err(|error| io::Error::other(format!("location portal failed: {error}")))?;
     log::info!("display: initializing I2C1 at 400 kHz");
     let mut i2c = I2cDriver::new(i2c, sda, scl, &I2cConfig::new().baudrate(400.kHz().into()))
         .map_err(|error| io::Error::other(format!("display I2C init failed: {error}")))?;
@@ -146,11 +157,63 @@ where
         if let Ok(request) = portal_requests.try_recv() {
             let action_request = match request {
                 PortalRequest::List { reply } => {
-                    let _ = reply.send(saved_locations.clone());
+                    let _ = reply.send(PortalLocationList {
+                        saved: saved_locations.clone(),
+                        presets: preset_locations.clone(),
+                    });
                     None
                 }
                 PortalRequest::Save { location, reply } => Some((false, location, reply)),
                 PortalRequest::Set { location, reply } => Some((true, location, reply)),
+                PortalRequest::Restore { reply } => {
+                    log::info!("web portal: restoring real GPS");
+                    let outcome = handle(Action::Restore);
+                    if outcome.success {
+                        location_active = false;
+                    } else {
+                        log::error!("web portal restore failed: {}", outcome.message);
+                    }
+                    if !locked {
+                        status = outcome.message.clone();
+                        status_ok = outcome.success;
+                        if display_awake {
+                            render(&mut display, &catalog, selected, scroll, &status, status_ok)?;
+                        }
+                    }
+                    let _ = reply.send(outcome);
+                    None
+                }
+                PortalRequest::ConnectWifi {
+                    ssid,
+                    password,
+                    reply,
+                } => {
+                    log::info!("web portal: connecting board to upstream Wi-Fi `{ssid}`");
+                    let outcome = match access_point.connect_upstream(&ssid, &password) {
+                        Ok(message) => Outcome::success(message),
+                        Err(error) => Outcome::error(format!("Wi-Fi connection failed: {error}")),
+                    };
+                    let _ = reply.send(outcome);
+                    None
+                }
+                PortalRequest::InstallMap { city_query, reply } => {
+                    log::info!("web portal: installing offline city map for `{city_query}`");
+                    let outcome = if access_point.status().connected_ssid().is_none() {
+                        Outcome::error("Connect the board to upstream Wi-Fi first")
+                    } else {
+                        match city_maps.lock() {
+                            Ok(mut store) => match store.install(&city_query) {
+                                Ok(message) => Outcome::success(message),
+                                Err(error) => {
+                                    Outcome::error(format!("City-map download failed: {error}"))
+                                }
+                            },
+                            Err(_) => Outcome::error("Map storage is busy"),
+                        }
+                    };
+                    let _ = reply.send(outcome);
+                    None
+                }
             };
             if let Some((set_location, location, reply)) = action_request {
                 let action_label = if set_location { "setting" } else { "saving" };

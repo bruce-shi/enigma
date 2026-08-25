@@ -170,14 +170,13 @@ impl DeviceRuntime {
             .await
             .get(device_id)
             .cloned()
-            .ok_or_else(|| "USB iPhone not found; scan again".to_string())?;
-        if descriptor.raw.connection_type != Connection::Usb {
-            return Err("select the USB-connected iPhone for board provisioning".into());
-        }
+            .ok_or_else(|| "iPhone not found; scan again".to_string())?;
         let provider = descriptor
             .raw
             .to_provider(UsbmuxdAddr::default(), "Enigma board provisioning");
-        enable_wifi_debugging(&provider).await?;
+        if descriptor.raw.connection_type == Connection::Usb {
+            enable_wifi_debugging(&provider).await?;
+        }
         let pairing_file = provider.get_pairing_file().await.map_err(classify_error)?;
         let lockdown_record = pairing_file.serialize().map_err(classify_error)?;
         let remote_record = tokio::time::timeout(
@@ -309,11 +308,8 @@ impl DeviceAdapter for DeviceRuntime {
         if descriptor.summary.state == DeviceState::NeedsTrust {
             return Err("unlock the iPhone and approve Trust This Computer".into());
         }
-        if !descriptor.summary.is_same_lan_wifi_candidate() {
-            return Err(
-                "connect to the iPhone over the same Wi-Fi network; USB operation remains deferred"
-                    .into(),
-            );
+        if !descriptor.summary.is_runtime_candidate() {
+            return Err("the iPhone is not ready; resolve its device status and scan again".into());
         }
         self.disconnect_device().await?;
         *self.selected_id.write().await = Some(device_id.to_string());

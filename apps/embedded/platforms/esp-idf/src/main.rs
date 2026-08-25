@@ -1,10 +1,12 @@
 mod backend;
 mod board;
 mod boards;
+mod city_maps;
 mod idevice_bridge;
 mod iphone;
 mod location_portal;
 mod location_store;
+mod persistent_storage;
 mod serial_provision;
 mod wifi_access;
 

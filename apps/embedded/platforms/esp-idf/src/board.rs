@@ -1,13 +1,19 @@
 //! ESP-IDF entry point shared by all supported board implementations.
 
-use enigma_embedded_core::{Action, Application, Location, Outcome};
+use enigma_embedded_core::{
+    Action, Application, Location, Outcome, merge_catalog, parse_location_presets,
+};
 use esp_idf_svc::{
     hal::peripherals::Peripherals, io::vfs::MountedEventfs, nvs::EspDefaultNvsPartition,
 };
 use log::info;
 use std::error::Error;
 
-use crate::{backend::EspIdfBackend, idevice_bridge, iphone};
+use crate::{
+    backend::EspIdfBackend,
+    idevice_bridge, iphone,
+    persistent_storage::{self, PersistentNvsPartition},
+};
 
 pub(crate) trait EspIdfBoard {
     type Hardware;
@@ -29,8 +35,11 @@ pub(crate) trait EspIdfBoard {
     /// Runs the board's input/output loop and forwards user actions to the app.
     fn run_ui<F>(
         hardware: Self::Hardware,
+        partition: PersistentNvsPartition,
+        clear_sensitive_data: bool,
         catalog: Vec<Location>,
         saved_locations: Vec<Location>,
+        preset_locations: Vec<Location>,
         handle: F,
     ) -> Result<(), Box<dyn Error>>
     where
@@ -65,16 +74,25 @@ pub fn run<B: EspIdfBoard>() -> Result<(), Box<dyn Error>> {
     }
 
     info!("initializing location and pairing storage");
-    let partition = EspDefaultNvsPartition::take()?;
+    let partition = persistent_storage::take_and_migrate(EspDefaultNvsPartition::take()?)?;
     let backend = EspIdfBackend::new(partition.clone(), clear_pairing)?;
     if backend.has_pairing_record()? {
         info!("stored iPhone Lockdown and remote-pairing identities are available");
     } else {
         info!("pairing identities incomplete; desktop provisioning remains available over CH340K");
     }
-    B::start_pairing_listener(&mut hardware, iphone::pairing_storage(partition)?)?;
+    B::start_pairing_listener(&mut hardware, iphone::pairing_storage(partition.clone())?)?;
     let saved_locations = backend.saved_locations()?;
-    let catalog = backend.catalog()?;
+    let private_locations =
+        parse_location_presets(option_env!("ENIGMA_PRIVATE_LOCATIONS").unwrap_or_default());
+    let private_location_count = private_locations.len();
+    let catalog = merge_catalog(
+        saved_locations
+            .iter()
+            .cloned()
+            .chain(private_locations.iter().cloned()),
+    );
+    info!("loaded {private_location_count} private build-time location presets");
     info!(
         "storage ready; loaded {} saved and {} total location choices",
         saved_locations.len(),
@@ -83,11 +101,19 @@ pub fn run<B: EspIdfBoard>() -> Result<(), Box<dyn Error>> {
     let mut application = Application::new(backend);
 
     info!("starting board display and touch UI");
-    B::run_ui(hardware, catalog, saved_locations, move |action| {
-        let outcome = application.handle(action);
-        if !outcome.success {
-            log::error!("iPhone location action failed: {}", outcome.message);
-        }
-        outcome
-    })
+    B::run_ui(
+        hardware,
+        partition,
+        clear_pairing,
+        catalog,
+        saved_locations,
+        private_locations,
+        move |action| {
+            let outcome = application.handle(action);
+            if !outcome.success {
+                log::error!("iPhone location action failed: {}", outcome.message);
+            }
+            outcome
+        },
+    )
 }

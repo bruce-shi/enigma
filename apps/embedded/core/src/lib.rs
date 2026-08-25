@@ -9,15 +9,6 @@ use alloc::{
 };
 use core::fmt::Display;
 
-const BUILTIN_LOCATIONS: [(&str, &str, &str); 6] = [
-    ("Vancouver", "49.2827", "-123.1207"),
-    ("San Francisco", "37.7749", "-122.4194"),
-    ("New York", "40.7128", "-74.0060"),
-    ("London", "51.5074", "-0.1278"),
-    ("Tokyo", "35.6762", "139.6503"),
-    ("Sydney", "-33.8688", "151.2093"),
-];
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Location {
     pub name: String,
@@ -210,17 +201,25 @@ where
     }
 }
 
-pub fn builtin_locations() -> Vec<Location> {
-    BUILTIN_LOCATIONS
-        .into_iter()
-        .map(|(name, latitude, longitude)| Location::new(name, latitude, longitude))
+/// Parses local-only presets supplied by the platform build environment.
+///
+/// Each record is `name|latitude|longitude`, separated by semicolons. Invalid
+/// records are ignored so a malformed private entry cannot prevent boot.
+pub fn parse_location_presets(encoded: &str) -> Vec<Location> {
+    encoded
+        .split(';')
+        .filter_map(|record| {
+            let mut fields = record.split('|');
+            let location = Location::new(fields.next()?, fields.next()?, fields.next()?);
+            (fields.next().is_none() && location.is_valid()).then_some(location)
+        })
         .collect()
 }
 
-/// Merges valid, unique history entries ahead of the built-in presets.
-pub fn merge_catalog(history: impl IntoIterator<Item = Location>) -> Vec<Location> {
+/// Collects valid, unique saved and private locations into the board catalog.
+pub fn merge_catalog(locations: impl IntoIterator<Item = Location>) -> Vec<Location> {
     let mut catalog = Vec::new();
-    for location in history.into_iter().chain(builtin_locations()) {
+    for location in locations {
         if location.is_valid()
             && !catalog
                 .iter()
@@ -246,31 +245,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn history_precedes_and_deduplicates_builtins() {
-        let vancouver = Location::new("Saved Vancouver", "49.2827", "-123.1207");
+    fn catalog_preserves_order_and_deduplicates_coordinates() {
+        let vancouver = Location::new("Vancouver", "49.2827", "-123.1207");
+        let duplicate = Location::new("Saved Vancouver", "49.2827", "-123.1207");
         let custom = Location::new("Home", "48.0000", "-123.0000");
-        let catalog = merge_catalog(vec![custom.clone(), vancouver]);
+        let catalog = merge_catalog(vec![custom.clone(), vancouver.clone(), duplicate]);
 
-        assert_eq!(catalog.len(), 7);
+        assert_eq!(catalog.len(), 2);
         assert_eq!(catalog[0], custom);
-        assert_eq!(catalog[1].name, "Saved Vancouver");
-        assert_eq!(
-            catalog
-                .iter()
-                .filter(|location| location.latitude == "49.2827")
-                .count(),
-            1
+        assert_eq!(catalog[1], vancouver);
+    }
+
+    #[test]
+    fn parses_valid_private_presets() {
+        let presets = parse_location_presets(
+            "Private A|49.25|-123.1;invalid;Private B|49.15|-123.0;Bad|91|0",
         );
+
+        assert_eq!(presets.len(), 2);
+        assert_eq!(presets[0], Location::new("Private A", "49.25", "-123.1"));
+        assert_eq!(presets[1], Location::new("Private B", "49.15", "-123.0"));
     }
 
     #[test]
     fn promoted_location_moves_to_front_without_duplication() {
-        let mut catalog = builtin_locations();
-        let tokyo = catalog[4].clone();
-        promote(&mut catalog, &tokyo);
+        let home = Location::new("Home", "49.25", "-123.1");
+        let cinema = Location::new("Cinema", "49.15", "-123.0");
+        let mut catalog = vec![home.clone(), cinema.clone()];
+        promote(&mut catalog, &cinema);
 
-        assert_eq!(catalog[0], tokyo);
-        assert_eq!(catalog.len(), 6);
+        assert_eq!(catalog[0], cinema);
+        assert_eq!(catalog[1], home);
+        assert_eq!(catalog.len(), 2);
     }
 
     struct MockBackend {

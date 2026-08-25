@@ -18,7 +18,9 @@ use esp_idf_svc::hal::{
     uart::{UartDriver, config::Config as UartConfig},
 };
 
-use crate::{board::EspIdfBoard, iphone, serial_provision};
+use crate::{
+    board::EspIdfBoard, iphone, persistent_storage::PersistentNvsPartition, serial_provision,
+};
 
 pub struct LichuangEsp32S3;
 
@@ -87,14 +89,25 @@ impl EspIdfBoard for LichuangEsp32S3 {
 
     fn run_ui<F>(
         hardware: Self::Hardware,
+        partition: PersistentNvsPartition,
+        clear_sensitive_data: bool,
         catalog: Vec<Location>,
         saved_locations: Vec<Location>,
+        preset_locations: Vec<Location>,
         handle: F,
     ) -> Result<(), Box<dyn Error>>
     where
         F: FnMut(Action) -> Outcome,
     {
-        ui::run(hardware, catalog, saved_locations, handle)
+        ui::run(
+            hardware,
+            partition,
+            clear_sensitive_data,
+            catalog,
+            saved_locations,
+            preset_locations,
+            handle,
+        )
     }
 }
 

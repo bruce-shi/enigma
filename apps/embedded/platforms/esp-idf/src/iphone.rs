@@ -9,7 +9,7 @@ use enigma_embedded_bridge_protocol::{MAX_PAIRING_RECORD_BYTES, decode_pairing_b
 use enigma_embedded_core::Location;
 use esp_idf_svc::{
     mdns::EspMdns,
-    nvs::{EspDefaultNvsPartition, EspKeyValueStorage, EspNvs, NvsDefault},
+    nvs::{EspKeyValueStorage, EspNvs, NvsCustom},
     sys::{self, EspError},
 };
 use idevice::{
@@ -25,7 +25,7 @@ use idevice::{
 };
 use tokio::sync::mpsc;
 
-use crate::wifi_access;
+use crate::{persistent_storage::PersistentNvsPartition, wifi_access};
 
 const PAIRING_KEY: &str = "pair_record";
 const REMOTE_PAIRING_KEY: &str = "rp_record";
@@ -35,7 +35,7 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 // deeply nested async futures. Keep this worker off scarce internal RAM and
 // leave enough headroom for the complete CoreDevice session.
 const SESSION_STACK_BYTES: usize = 256 * 1024;
-pub type PairingStorage = EspKeyValueStorage<NvsDefault>;
+pub type PairingStorage = EspKeyValueStorage<NvsCustom>;
 
 enum LocationCommand {
     Set {
@@ -64,7 +64,7 @@ pub struct IphoneController {
 }
 
 pub fn pairing_storage(
-    partition: EspDefaultNvsPartition,
+    partition: PersistentNvsPartition,
 ) -> Result<PairingStorage, Box<dyn Error>> {
     let nvs = EspNvs::new(partition, "idevice", true)?;
     Ok(EspKeyValueStorage::new(nvs))

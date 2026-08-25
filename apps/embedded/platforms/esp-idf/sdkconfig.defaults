@@ -20,9 +20,18 @@ CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT=8192
 # Serve the iPhone location portal over both captive HTTP onboarding and HTTPS.
 CONFIG_ESP_HTTPS_SERVER_ENABLE=y
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
-# Advertise the board as DNS through the SoftAP DHCP lease. The firmware DNS
-# responder resolves the stable enigma.test portal name to the AP address.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+# Advertise the board as DNS through the SoftAP DHCP lease. The firmware keeps
+# enigma.test local and forwards other queries after upstream Wi-Fi connects.
 CONFIG_LWIP_DHCPS_ADD_DNS=y
+# The captive HTTP/HTTPS portal, DNS relay, mDNS discovery, Safari keep-alive
+# sessions, and the two-stage CoreDevice tunnel coexist during a location set.
+# ESP-IDF's default of 10 sockets can be exhausted before pairing connects.
+CONFIG_LWIP_MAX_SOCKETS=24
+# Route IPv4 traffic from Enigma-XXXX through the board's upstream station.
+CONFIG_LWIP_IP_FORWARD=y
+CONFIG_LWIP_IPV4_NAPT=y
 
 # Match the known-good board definition in xiaozhi-esp32.
 CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1536

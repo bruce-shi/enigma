@@ -40,13 +40,14 @@ and then restores automatically. `--expected-ios` prevents a changed device inde
 from targeting a different iOS version. Record the host version, exact iOS build,
 transport, command, result, and any diagnostic code in `MILESTONES.md`.
 
-## Wi-Fi beta boundary
+## Desktop transport boundary
 
 - Initial USB pairing is mandatory.
-- The supported beta topology is the same ordinary local network.
+- Ready USB devices can be selected directly for runtime control.
+- The supported wireless beta topology is the same ordinary local network.
 - Guest-network/client isolation and blocked multicast discovery prevent
   discovery.
 - VPN subnets, Internet control, and iPhone personal-hotspot topology are not
   supported claims.
-- USB runtime control is disabled until physical qualification. Wi-Fi failures must
-  not prevent the restore command for an already selected same-LAN device.
+- A transport failure must not prevent the restore command for an already selected
+  device.

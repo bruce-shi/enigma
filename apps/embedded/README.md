@@ -16,7 +16,9 @@ apps/embedded/
         └── src/
             ├── board.rs          # abstract ESP-IDF board entry point
             ├── backend.rs        # core LocationBackend implementation
-            ├── location_portal.rs # captive DNS, iOS trust setup, and HTTPS GPS form
+            ├── city_maps.rs      # bundled/downloaded city pack validation and flash storage
+            ├── location_portal.rs # captive DNS, iOS trust setup, and HTTPS map control
+            ├── wifi_access.rs    # hotspot plus optional upstream Wi-Fi/NAPT gateway
             └── boards/
                 └── lichuang_esp32s3/
                     ├── mod.rs    # pins and board startup

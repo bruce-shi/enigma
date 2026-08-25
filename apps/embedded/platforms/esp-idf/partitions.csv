@@ -2,3 +2,5 @@
 nvs,      data, nvs,     0x9000,  0x16000,
 phy_init, data, phy,     0x1f000, 0x1000,
 factory,  app,  factory, 0x20000, 0x800000,
+userdata, data, nvs,     0x820000,0x20000,
+mapdata,  data, spiffs,  0x840000,0x7C0000,
