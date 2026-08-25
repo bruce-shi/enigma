@@ -156,6 +156,15 @@ async fn start_simulation(
     start_and_record(&state, plan).await
 }
 
+#[tauri::command]
+async fn extend_route_simulation(
+    state: tauri::State<'_, AppState>,
+    points: Vec<Coordinate>,
+    options: model::RouteOptions,
+) -> Result<(), String> {
+    state.simulation.extend_route(points, options).await
+}
+
 async fn start_and_record(state: &AppState, plan: SimulationPlan) -> Result<(), String> {
     state.vault.set_dirty_session(true)?;
     if let Err(error) = state.simulation.start(plan.clone()).await {
@@ -515,6 +524,7 @@ pub fn run() {
             get_host_location,
             set_location,
             start_simulation,
+            extend_route_simulation,
             control_simulation,
             update_joystick_heading,
             clear_location,

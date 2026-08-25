@@ -1,8 +1,19 @@
-import type { Coordinate, SimulationPlan } from "@enigma/contracts";
+import type { Coordinate, RoutingProfile, SimulationPlan } from "@enigma/contracts";
 import { assertCoordinate, distanceMeters, estimatedTravelTimeMs } from "@enigma/route-engine";
 
 const MAX_GPX_BYTES = 10 * 1024 * 1024;
 const MAX_GPX_POINTS = 100_000;
+
+export function suggestedSpeedKph(profile: RoutingProfile): number {
+  switch (profile) {
+    case "driving":
+      return 50;
+    case "cycling":
+      return 15;
+    case "walking":
+      return 5;
+  }
+}
 
 export function parseCoordinateText(value: string): Coordinate | undefined {
   const parts = value.split(",");

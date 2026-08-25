@@ -65,6 +65,7 @@ import {
   parseGpx,
   planPoints,
   routeMetrics,
+  suggestedSpeedKph,
 } from "./workflows";
 
 type EditorMode = "teleport" | "route" | "joystick" | "gpx";
@@ -105,7 +106,7 @@ export function App() {
   const [mapError, setMapError] = useState<string>();
   const [mode, setMode] = useState<EditorMode>("teleport");
   const [activeMode, setActiveMode] = useState<EditorMode>();
-  const [speedKph, setSpeedKph] = useState(5);
+  const [speedKph, setSpeedKph] = useState(() => suggestedSpeedKph("driving"));
   const [speedProfile, setSpeedProfile] = useState<"constant" | "natural">("constant");
   const [repetitions, setRepetitions] = useState(1);
   const [roundTrip, setRoundTrip] = useState(false);
@@ -125,6 +126,10 @@ export function App() {
   const [availableUpdate, setAvailableUpdate] = useState<DesktopUpdateInfo>();
   const [updateMessage, setUpdateMessage] = useState<string>();
   const joystickMovementRef = useRef<Promise<boolean> | undefined>(undefined);
+  const routedRouteRef = useRef<{
+    waypoints: Coordinate[];
+    profile: RoutingProfile;
+  }>(undefined);
 
   useEffect(() => {
     const syncRoute = () => setRoute(desktopRouteFromHash(globalThis.location.hash));
@@ -208,12 +213,21 @@ export function App() {
       setRoutingError(undefined);
       return;
     }
-    setRoutePoints(routeWaypoints);
     setRoutingError(undefined);
     if (routeWaypoints.length < 2) {
+      routedRouteRef.current = { waypoints: routeWaypoints, profile: routingProfile };
+      setRoutePoints(routeWaypoints);
       setRoutingLoading(false);
       return;
     }
+    if (
+      routedRouteRef.current?.profile === routingProfile &&
+      sameCoordinates(routedRouteRef.current.waypoints, routeWaypoints)
+    ) {
+      setRoutingLoading(false);
+      return;
+    }
+    setRoutePoints(routeWaypoints);
     if (!mapboxAccessTokenConfigured(mapboxAccessToken)) {
       setRoutingLoading(false);
       setRoutingError("Add a Mapbox public token in Settings to calculate road routes");
@@ -228,7 +242,10 @@ export function App() {
       signal: controller.signal,
     })
       .then((points) => {
-        if (!controller.signal.aborted) setRoutePoints(points);
+        if (!controller.signal.aborted) {
+          routedRouteRef.current = { waypoints: routeWaypoints, profile: routingProfile };
+          setRoutePoints(points);
+        }
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
@@ -593,10 +610,42 @@ export function App() {
     return true;
   };
 
+  const extendRunningRoute = async (next: Coordinate) => {
+    const previous = routeWaypoints.at(-1);
+    if (!previous) {
+      setRoutingError("The running route has no endpoint to extend");
+      return;
+    }
+    if (routingLoading) return;
+    setRoutingLoading(true);
+    setRoutingError(undefined);
+    setError(undefined);
+    try {
+      const leg = await requestMapboxRoute({
+        waypoints: [previous, next],
+        profile: routingProfile,
+        accessToken: mapboxAccessToken ?? "",
+      });
+      await desktopApi.extendRouteSimulation(leg, options);
+      const nextWaypoints = [...routeWaypoints, next];
+      routedRouteRef.current = { waypoints: nextWaypoints, profile: routingProfile };
+      setRoutePoints((current) => [...current, ...leg.slice(1)]);
+      setRouteWaypoints(nextWaypoints);
+    } catch (cause) {
+      setRoutingError(errorMessage(cause));
+    } finally {
+      setRoutingLoading(false);
+    }
+  };
+
   const onMapClick = (next: Coordinate) => {
     if (mode === "route") {
       if (routeWaypoints.length >= MAX_MAPBOX_WAYPOINTS) {
         setRoutingError(`Mapbox routes support up to ${MAX_MAPBOX_WAYPOINTS} waypoints`);
+        return;
+      }
+      if (activeMode === "route" && (snapshot.state === "running" || snapshot.state === "paused")) {
+        void extendRunningRoute(next);
         return;
       }
       setRouteWaypoints((current) => [...current, next]);
@@ -604,6 +653,17 @@ export function App() {
       return;
     }
     setPoint(next);
+  };
+
+  const selectMode = (nextMode: EditorMode) => {
+    if (nextMode !== mode) {
+      if (nextMode === "route") {
+        setSpeedKph(suggestedSpeedKph(routingProfile));
+      } else if (nextMode === "joystick" || nextMode === "gpx") {
+        setSpeedKph(5);
+      }
+    }
+    setMode(nextMode);
   };
 
   const running = snapshot.state === "running";
@@ -947,6 +1007,7 @@ export function App() {
             </Button>
             {mode === "route" && routeWaypoints.length > 0 && (
               <Button
+                isDisabled={activeMode === "route" && (running || paused)}
                 onPress={() => {
                   setRouteWaypoints((current) => current.slice(0, -1));
                 }}
@@ -970,7 +1031,7 @@ export function App() {
                 <Button
                   aria-label={`${label} mode${mode === id ? ", selected" : ""}`}
                   key={id}
-                  onPress={() => setMode(id)}
+                  onPress={() => selectMode(id)}
                   variant={mode === id ? "primary" : "secondary"}
                 >
                   <Icon size={16} /> {label}
@@ -988,7 +1049,10 @@ export function App() {
                   routingLoading={routingLoading}
                   setRepetitions={setRepetitions}
                   setRoundTrip={setRoundTrip}
-                  setRoutingProfile={setRoutingProfile}
+                  setRoutingProfile={(profile) => {
+                    setRoutingProfile(profile);
+                    setSpeedKph(suggestedSpeedKph(profile));
+                  }}
                   setSpeedKph={setSpeedKph}
                   setSpeedProfile={setSpeedProfile}
                 />
@@ -1223,7 +1287,7 @@ function MovementOptions({
     <div className="grid grid-cols-2 gap-3">
       <FormField label="Speed (km/h)">
         <input
-          className="rounded-lg border border-border bg-surface px-3 py-2"
+          className="min-w-0 w-full rounded-lg border border-border bg-surface px-3 py-2"
           max={108}
           min={0.4}
           onChange={(event) => setSpeedKph(Number(event.target.value))}
@@ -1234,7 +1298,7 @@ function MovementOptions({
       </FormField>
       <FormField label="Speed profile">
         <select
-          className="rounded-lg border border-border bg-surface px-3 py-2"
+          className="min-w-0 w-full rounded-lg border border-border bg-surface px-3 py-2"
           onChange={(event) => setSpeedProfile(event.target.value as "constant" | "natural")}
           value={speedProfile}
         >
@@ -1244,14 +1308,14 @@ function MovementOptions({
       </FormField>
       <FormField label="Repetitions">
         <input
-          className="rounded-lg border border-border bg-surface px-3 py-2"
+          className="min-w-0 w-full rounded-lg border border-border bg-surface px-3 py-2"
           min={1}
           onChange={(event) => setRepetitions(Math.max(1, Number(event.target.value)))}
           type="number"
           value={repetitions}
         />
       </FormField>
-      <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
+      <label className="flex h-10 min-w-0 items-center gap-2 self-end px-1 text-sm font-medium">
         <input
           checked={roundTrip}
           onChange={(event) => setRoundTrip(event.target.checked)}
@@ -1510,6 +1574,16 @@ function routeEndpoints(points: Coordinate[]): Coordinate[] {
   const first = points[0];
   const last = points.at(-1);
   return first && last ? [first, last] : [];
+}
+
+function sameCoordinates(left: Coordinate[], right: Coordinate[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (point, index) =>
+        point.latitude === right[index]?.latitude && point.longitude === right[index]?.longitude,
+    )
+  );
 }
 
 function downloadTextFile(contents: string, fileName: string, type: string): void {

@@ -8,9 +8,16 @@ import {
   parseGpx,
   planPoints,
   routeMetrics,
+  suggestedSpeedKph,
 } from "./workflows";
 
 describe("desktop route workflows", () => {
+  it("uses movement-appropriate suggested speeds for Mapbox route profiles", () => {
+    expect(suggestedSpeedKph("driving")).toBe(50);
+    expect(suggestedSpeedKph("cycling")).toBe(15);
+    expect(suggestedSpeedKph("walking")).toBe(5);
+  });
+
   it("imports a bounded GPX track and exports it without losing coordinates", () => {
     const input = `<?xml version="1.0"?><gpx xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>
       <trkpt lat="49.2827" lon="-123.1207"><ele>12</ele></trkpt>

@@ -69,6 +69,7 @@ impl DeviceRuntime {
         let descriptor = self.selected_descriptor().await?;
         let provider = descriptor.raw.to_provider(UsbmuxdAddr::default(), "Enigma");
         let (sender, receiver) = mpsc::channel(8);
+        let (startup_reply, startup_response) = oneshot::channel();
         std::thread::Builder::new()
             .name("enigma-device-session".into())
             .spawn(move || {
@@ -77,12 +78,22 @@ impl DeviceRuntime {
                     .build()
                     .expect("device session runtime must start");
                 runtime.block_on(async move {
-                    if let Err(modern_error) = run_modern_session(provider, receiver).await {
-                        tracing::warn!(error = %modern_error, "location service unavailable");
+                    let mut startup_reply = Some(startup_reply);
+                    if let Err(error) =
+                        run_location_session(provider, receiver, &mut startup_reply).await
+                    {
+                        if let Some(reply) = startup_reply.take() {
+                            let _ = reply.send(Err(error.clone()));
+                        }
+                        tracing::warn!(%error, "location service unavailable");
                     }
                 });
             })
             .map_err(|error| format!("could not start the device session: {error}"))?;
+        tokio::time::timeout(Duration::from_secs(25), startup_response)
+            .await
+            .map_err(|_| "location service timed out while starting".to_string())?
+            .map_err(|_| "location service stopped while starting".to_string())??;
         *current = Some(sender.clone());
         Ok(sender)
     }
@@ -332,81 +343,114 @@ impl DeviceAdapter for DeviceRuntime {
     }
 }
 
-async fn run_modern_session(
+async fn run_location_session(
     provider: idevice::provider::UsbmuxdProvider,
     mut receiver: mpsc::Receiver<LocationCommand>,
+    startup_reply: &mut Option<oneshot::Sender<Result<(), String>>>,
 ) -> Result<(), String> {
-    match CoreDeviceProxy::connect(&provider).await {
-        Ok(proxy) => {
-            let rsd_port = proxy.tunnel_info().server_rsd_port;
-            let adapter = proxy.create_software_tunnel().map_err(classify_error)?;
-            let mut adapter = adapter.to_async_handle();
-            let stream = adapter.connect(rsd_port).await.map_err(classify_error)?;
-            let mut handshake = RsdHandshake::new(stream).await.map_err(classify_error)?;
-            let mut server: RemoteServerClient<Box<dyn idevice::ReadWrite>> =
-                RemoteServerClient::connect_rsd(&mut adapter, &mut handshake)
-                    .await
-                    .map_err(classify_error)?;
-            server.read_message(0).await.map_err(classify_error)?;
-            let mut location = LocationSimulationClient::new(&mut server)
-                .await
-                .map_err(classify_error)?;
-            while let Some(command) = receiver.recv().await {
-                let should_close = matches!(command, LocationCommand::Clear(_));
-                match command {
-                    LocationCommand::Set(point, reply) => {
-                        let result = location
-                            .set(point.latitude, point.longitude)
-                            .await
-                            .map_err(classify_error);
-                        let _ = reply.send(result);
-                    }
-                    LocationCommand::Clear(reply) => {
-                        let result = location.clear().await.map_err(classify_error);
-                        let _ = reply.send(result);
-                    }
-                }
-                if should_close {
-                    break;
-                }
-            }
-            Ok(())
+    match run_modern_location_session(&provider, &mut receiver, startup_reply).await {
+        Ok(()) => Ok(()),
+        Err(modern_error) if startup_reply.is_some() => {
+            tracing::info!(%modern_error, "falling back to legacy location service");
+            run_legacy_location_session(&provider, &mut receiver, startup_reply, modern_error).await
         }
-        Err(modern_error) => {
-            tracing::info!(error = %modern_error, "falling back to legacy location service");
-            let mut location = LocationSimulationService::connect(&provider)
-                .await
-                .map_err(|legacy_error| {
-                    format!(
-                        "modern service failed: {}; legacy service failed: {}",
-                        classify_error(modern_error),
-                        classify_error(legacy_error)
-                    )
-                })?;
-            while let Some(command) = receiver.recv().await {
-                let should_close = matches!(command, LocationCommand::Clear(_));
-                match command {
-                    LocationCommand::Set(point, reply) => {
-                        let latitude = point.latitude.to_string();
-                        let longitude = point.longitude.to_string();
-                        let result = location
-                            .set(&latitude, &longitude)
-                            .await
-                            .map_err(classify_error);
-                        let _ = reply.send(result);
-                    }
-                    LocationCommand::Clear(reply) => {
-                        let result = location.clear().await.map_err(classify_error);
-                        let _ = reply.send(result);
-                    }
-                }
-                if should_close {
-                    break;
-                }
+        Err(error) => Err(error),
+    }
+}
+
+async fn run_modern_location_session(
+    provider: &idevice::provider::UsbmuxdProvider,
+    receiver: &mut mpsc::Receiver<LocationCommand>,
+    startup_reply: &mut Option<oneshot::Sender<Result<(), String>>>,
+) -> Result<(), String> {
+    let proxy = CoreDeviceProxy::connect(provider)
+        .await
+        .map_err(classify_error)?;
+    let rsd_port = proxy.tunnel_info().server_rsd_port;
+    let adapter = proxy.create_software_tunnel().map_err(classify_error)?;
+    let mut adapter = adapter.to_async_handle();
+    let stream = adapter.connect(rsd_port).await.map_err(classify_error)?;
+    let mut handshake = RsdHandshake::new(stream).await.map_err(classify_error)?;
+    let mut server: RemoteServerClient<Box<dyn idevice::ReadWrite>> =
+        RemoteServerClient::connect_rsd(&mut adapter, &mut handshake)
+            .await
+            .map_err(classify_error)?;
+    server.read_message(0).await.map_err(classify_error)?;
+    let mut location = LocationSimulationClient::new(&mut server)
+        .await
+        .map_err(classify_error)?;
+    signal_location_session_ready(startup_reply)?;
+    while let Some(command) = receiver.recv().await {
+        let should_close = matches!(command, LocationCommand::Clear(_));
+        match command {
+            LocationCommand::Set(point, reply) => {
+                let result = location
+                    .set(point.latitude, point.longitude)
+                    .await
+                    .map_err(classify_error);
+                let _ = reply.send(result);
             }
-            Ok(())
+            LocationCommand::Clear(reply) => {
+                let result = location.clear().await.map_err(classify_error);
+                let _ = reply.send(result);
+            }
+        }
+        if should_close {
+            break;
         }
     }
+    Ok(())
+}
+
+async fn run_legacy_location_session(
+    provider: &idevice::provider::UsbmuxdProvider,
+    receiver: &mut mpsc::Receiver<LocationCommand>,
+    startup_reply: &mut Option<oneshot::Sender<Result<(), String>>>,
+    modern_error: String,
+) -> Result<(), String> {
+    let mut location =
+        LocationSimulationService::connect(provider)
+            .await
+            .map_err(|legacy_error| {
+                format!(
+                    "modern service failed: {modern_error}; legacy service failed: {}",
+                    classify_error(legacy_error)
+                )
+            })?;
+    signal_location_session_ready(startup_reply)?;
+    while let Some(command) = receiver.recv().await {
+        let should_close = matches!(command, LocationCommand::Clear(_));
+        match command {
+            LocationCommand::Set(point, reply) => {
+                let latitude = point.latitude.to_string();
+                let longitude = point.longitude.to_string();
+                let result = location
+                    .set(&latitude, &longitude)
+                    .await
+                    .map_err(classify_error);
+                let _ = reply.send(result);
+            }
+            LocationCommand::Clear(reply) => {
+                let result = location.clear().await.map_err(classify_error);
+                let _ = reply.send(result);
+            }
+        }
+        if should_close {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn signal_location_session_ready(
+    startup_reply: &mut Option<oneshot::Sender<Result<(), String>>>,
+) -> Result<(), String> {
+    if let Some(reply) = startup_reply.take() {
+        reply
+            .send(Ok(()))
+            .map_err(|_| "location service startup was cancelled".to_string())?;
+    }
+    Ok(())
 }
 
 fn classify_error(error: impl std::fmt::Display) -> String {

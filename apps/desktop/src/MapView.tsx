@@ -30,9 +30,11 @@ export function MapView({
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const mapClickRef = useRef(onMapClick);
   const mapErrorRef = useRef(onMapError);
+  const routeDataRef = useRef(routeGeoJson(routePoints, waypoints));
   const [mapReady, setMapReady] = useState(false);
   mapClickRef.current = onMapClick;
   mapErrorRef.current = onMapError;
+  routeDataRef.current = routeGeoJson(routePoints, waypoints);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current || !mapboxAccessTokenConfigured(accessToken)) {
@@ -51,17 +53,20 @@ export function MapView({
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.once("style.load", () => {
-      map.addSource(ROUTE_SOURCE, { type: "geojson", data: routeGeoJson([], []) });
+      if (mapRef.current !== map) return;
+      map.addSource(ROUTE_SOURCE, { type: "geojson", data: routeDataRef.current });
       map.addLayer({
         id: "enigma-route-line",
         type: "line",
         source: ROUTE_SOURCE,
+        filter: ["==", ["geometry-type"], "LineString"],
         paint: { "line-color": "#4169e1", "line-width": 5, "line-opacity": 0.9 },
       });
       map.addLayer({
         id: "enigma-route-points",
         type: "circle",
         source: ROUTE_SOURCE,
+        filter: ["==", ["geometry-type"], "Point"],
         paint: {
           "circle-color": "#ffffff",
           "circle-radius": 4,
@@ -73,6 +78,7 @@ export function MapView({
       setMapReady(true);
     });
     map.on("error", ({ error }) => {
+      if (mapRef.current !== map) return;
       mapErrorRef.current?.(
         error instanceof Error ? error.message : "Mapbox could not load the map",
       );
@@ -85,8 +91,10 @@ export function MapView({
       markerRef.current?.remove();
       markerRef.current = null;
       map.remove();
-      mapRef.current = null;
-      setMapReady(false);
+      if (mapRef.current === map) {
+        mapRef.current = null;
+        setMapReady(false);
+      }
     };
   }, [accessToken]);
 

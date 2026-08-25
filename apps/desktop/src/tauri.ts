@@ -1,6 +1,7 @@
 import type {
   Coordinate,
   DeviceSummary,
+  RouteOptions,
   SimulationPlan,
   SimulationSnapshot,
 } from "@enigma/contracts";
@@ -103,6 +104,8 @@ async function browserMock<T>(command: string, args?: Record<string, unknown>): 
       });
       return undefined as T;
     }
+    case "extend_route_simulation":
+      return undefined as T;
     case "control_simulation":
       mockSnapshot = {
         ...mockSnapshot,
@@ -202,6 +205,8 @@ export const desktopApi = {
   },
   setLocation: (point: Coordinate) => invoke<void>("set_location", { point }),
   startSimulation: (plan: SimulationPlan) => invoke<void>("start_simulation", { plan }),
+  extendRouteSimulation: (points: Coordinate[], options: RouteOptions) =>
+    invoke<void>("extend_route_simulation", { points, options }),
   controlSimulation: (action: "pause" | "resume" | "restart" | "stop") =>
     invoke<void>("control_simulation", { action }),
   updateJoystickHeading: (headingDegrees: number) =>

@@ -6,7 +6,7 @@ use std::{
     time::Instant,
 };
 
-use tokio::sync::{Mutex, RwLock, watch};
+use tokio::sync::{Mutex, RwLock, mpsc, watch};
 
 use crate::{
     device::{DeviceAdapter, DeviceRuntime},
@@ -40,6 +40,7 @@ pub struct SimulationController {
     device: Arc<dyn DeviceAdapter>,
     snapshot: Arc<RwLock<SimulationSnapshot>>,
     control: Mutex<Option<watch::Sender<RunControl>>>,
+    route_extension: Mutex<Option<mpsc::Sender<Vec<crate::model::Coordinate>>>>,
     active: Arc<AtomicBool>,
     joystick_heading: Arc<RwLock<f64>>,
 }
@@ -54,6 +55,7 @@ impl SimulationController {
             device,
             snapshot: Arc::new(RwLock::new(SimulationSnapshot::default())),
             control: Mutex::new(None),
+            route_extension: Mutex::new(None),
             active: Arc::new(AtomicBool::new(false)),
             joystick_heading: Arc::new(RwLock::new(0.0)),
         })
@@ -84,12 +86,16 @@ impl SimulationController {
             }
             SimulationPlan::Path {
                 points, options, ..
+            } => {
+                let extendable = options.repetitions == 1 && !options.round_trip;
+                let samples = route_samples(&points, &options)?;
+                self.start_samples(samples, extendable).await?;
             }
-            | SimulationPlan::Gpx {
+            SimulationPlan::Gpx {
                 points, options, ..
             } => {
                 let samples = route_samples(&points, &options)?;
-                self.start_samples(samples).await?;
+                self.start_samples(samples, false).await?;
             }
             SimulationPlan::Joystick {
                 origin,
@@ -155,22 +161,35 @@ impl SimulationController {
         Ok(())
     }
 
-    async fn start_samples(&self, samples: Vec<crate::model::Coordinate>) -> Result<(), String> {
+    async fn start_samples(
+        &self,
+        samples: Vec<crate::model::Coordinate>,
+        extendable: bool,
+    ) -> Result<(), String> {
         let first = *samples
             .first()
             .ok_or_else(|| "route contains no points".to_string())?;
         self.device.set_location(first).await?;
         let (sender, mut receiver) = watch::channel(RunControl::default());
         *self.control.lock().await = Some(sender);
+        let (extension_sender, mut extension_receiver) = mpsc::channel(8);
+        *self.route_extension.lock().await = extendable.then_some(extension_sender);
         self.active.store(true, Ordering::SeqCst);
         let device = self.device.clone();
         let snapshot = self.snapshot.clone();
         let active = self.active.clone();
         tokio::spawn(async move {
             let started = Instant::now();
+            let mut samples = samples;
             let mut index = 0_usize;
             let mut restart_generation = 0;
-            while index < samples.len() {
+            loop {
+                while let Ok(mut extension) = extension_receiver.try_recv() {
+                    samples.append(&mut extension);
+                }
+                if index >= samples.len() {
+                    break;
+                }
                 let control = *receiver.borrow();
                 if control.restart_generation != restart_generation {
                     index = 0;
@@ -213,6 +232,33 @@ impl SimulationController {
             }
         });
         Ok(())
+    }
+
+    pub async fn extend_route(
+        &self,
+        points: Vec<crate::model::Coordinate>,
+        mut options: crate::model::RouteOptions,
+    ) -> Result<(), String> {
+        if !self.is_active() {
+            return Err("no running route is available to extend".into());
+        }
+        let sender = self.route_extension.lock().await.clone().ok_or_else(|| {
+            "the current route cannot be extended; use one repetition with round trip off"
+                .to_string()
+        })?;
+        options.repetitions = 1;
+        options.round_trip = false;
+        let extension = route_samples(&points, &options)?
+            .into_iter()
+            .skip(1)
+            .collect::<Vec<_>>();
+        if extension.is_empty() {
+            return Err("the route extension contains no movement".into());
+        }
+        sender
+            .send(extension)
+            .await
+            .map_err(|_| "the running route finished before it could be extended".to_string())
     }
 
     pub async fn control(&self, action: &str) -> Result<(), String> {
@@ -261,6 +307,7 @@ impl SimulationController {
     }
 
     pub async fn stop(&self) -> Result<(), String> {
+        self.route_extension.lock().await.take();
         if let Some(sender) = self.control.lock().await.take() {
             let current = *sender.borrow();
             let _ = sender.send(RunControl {
@@ -294,7 +341,7 @@ mod tests {
     use async_trait::async_trait;
 
     use super::*;
-    use crate::model::{Coordinate, DeviceSummary};
+    use crate::model::{Coordinate, DeviceSummary, RouteOptions, SpeedProfile};
 
     #[derive(Default)]
     struct FakeDevice {
@@ -333,6 +380,61 @@ mod tests {
             longitude: -123.1207,
             altitude_meters: None,
         }
+    }
+
+    fn route_options() -> RouteOptions {
+        RouteOptions {
+            speed_kph: 108.0,
+            speed_profile: SpeedProfile::Constant,
+            repetitions: 1,
+            round_trip: false,
+            update_interval_ms: 1000,
+            natural_variation_seed: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn running_route_continues_into_an_appended_leg() {
+        let device = Arc::new(FakeDevice::default());
+        let controller = SimulationController::with_device(device.clone());
+        let first = origin();
+        let second = Coordinate {
+            longitude: first.longitude + 0.000_001,
+            ..first
+        };
+        let third = Coordinate {
+            longitude: first.longitude + 0.000_002,
+            ..first
+        };
+        controller
+            .start(SimulationPlan::Path {
+                points: vec![first, second],
+                options: route_options(),
+                honor_timestamps: false,
+                waypoints: Some(vec![first, second]),
+                routing_profile: None,
+            })
+            .await
+            .unwrap();
+        controller
+            .extend_route(vec![second, third], route_options())
+            .await
+            .unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(4), async {
+            loop {
+                if device.points.lock().unwrap().iter().any(|point| {
+                    (point.latitude - third.latitude).abs() < 1e-9
+                        && (point.longitude - third.longitude).abs() < 1e-9
+                }) {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        controller.stop().await.unwrap();
     }
 
     #[tokio::test]
