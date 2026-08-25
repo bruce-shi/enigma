@@ -126,7 +126,7 @@ describe("embedded city-map service", () => {
     const detailStream = new Blob([compressedDetails])
       .stream()
       .pipeThrough(new DecompressionStream("gzip"));
-    const decoded = await new Response(detailStream).json();
+    const decoded = (await new Response(detailStream).json()) as ReturnType<typeof cityMapDetails>;
     expect(response.headers.get("Content-Type")).toBe("application/vnd.enigma.city-map");
     expect(response.headers.get("X-Enigma-Map-Data-Encoding")).toBe("gzip");
     expect(Number(response.headers.get("X-Enigma-Map-Package-Bytes"))).toBe(body.byteLength);

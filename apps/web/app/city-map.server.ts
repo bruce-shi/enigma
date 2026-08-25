@@ -548,10 +548,9 @@ export function cityMapDetails(
       const streetIndex = streetIndexes.get(street);
       const geometry = road.geometry;
       if (streetIndex === undefined || !geometry) return [];
-      const projected = simplify(geometry.map(project), 0.65).map(([x, y]) => [
-        Math.round(x),
-        Math.round(y),
-      ]);
+      const projected = simplify(geometry.map(project), 0.65).map(
+        ([x, y]): ProjectedPoint => [Math.round(x), Math.round(y)],
+      );
       if (projected.length < 2) return [];
       const xCoordinates = projected.map(([x]) => x);
       const yCoordinates = projected.map(([, y]) => y);
