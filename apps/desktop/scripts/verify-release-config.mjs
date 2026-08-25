@@ -30,6 +30,11 @@ if (releaseWorkflow.includes("uploadUpdaterJson:")) {
 }
 if (!configuration.bundle?.targets?.includes("dmg")) errors.push("DMG bundle target is missing");
 if (!configuration.bundle?.targets?.includes("nsis")) errors.push("NSIS bundle target is missing");
+for (const icon of ["icons/icon.icns", "icons/icon.ico"]) {
+  if (!configuration.bundle?.icon?.includes(icon)) {
+    errors.push(`platform bundle icon is missing: ${icon}`);
+  }
+}
 if (configuration.bundle?.macOS?.minimumSystemVersion !== "12.0") {
   errors.push("macOS minimum system version must remain 12.0");
 }

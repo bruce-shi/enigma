@@ -13,27 +13,7 @@ import {
 export type ThemePreference = "system" | "light" | "dark";
 
 export function EnigmaMark({ className = "" }: { className?: string }) {
-  return (
-    <svg aria-hidden className={className} viewBox="0 0 64 64">
-      <rect width="64" height="64" rx="14" fill="#4169e1" />
-      <path
-        d="M17 16h26c5.5 0 9 3.5 9 8.5S48.5 33 43 33H24c-5 0-8 3-8 8v4c0 5 3 8 8 8h17"
-        fill="none"
-        stroke="#fff"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="5.5"
-      />
-      <path d="M16 42h17" fill="none" stroke="#fff" strokeLinecap="round" strokeWidth="5.5" />
-      <circle cx="17" cy="16" r="4.5" fill="#fff" />
-      <circle cx="34" cy="42" r="4.5" fill="#fff" />
-      <path
-        d="M48 41c-4.7 0-8.5 3.8-8.5 8.5 0 6.1 8.5 10.8 8.5 10.8s8.5-4.7 8.5-10.8c0-4.7-3.8-8.5-8.5-8.5Zm0 11.7a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 0 6.4Z"
-        fill="#fff"
-        fillRule="evenodd"
-      />
-    </svg>
-  );
+  return <img alt="" aria-hidden className={className} src="/enigma-mark-reversed.png" />;
 }
 
 function resolveTheme(preference: ThemePreference): "enigma-light" | "enigma-dark" {

@@ -10,6 +10,7 @@ import {
   AppShell,
   ConfirmExitDialog,
   DeviceStatus,
+  EnigmaMark,
   SimulationControls,
   ThemeToggle,
 } from "./index";
@@ -86,6 +87,12 @@ afterEach(() => {
 });
 
 describe("shared Enigma UI", () => {
+  it("uses the shared abstract Enigma mark", () => {
+    const { container } = render(<EnigmaMark />);
+    expect(container.querySelector("img")).toHaveAttribute("src", "/enigma-mark-reversed.png");
+    expect(container.querySelector("img")).toHaveAttribute("alt", "");
+  });
+
   it("announces device state", () => {
     render(<DeviceStatus state="needs_trust" name="Test iPhone" transport="network" />);
     expect(screen.getByRole("status")).toHaveTextContent("Trust required · Wi-Fi beta");
