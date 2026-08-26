@@ -1218,7 +1218,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 
 [[package]]
 name = "enigma-desktop"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1244,18 +1244,18 @@ dependencies = [
 
 [[package]]
 name = "enigma-embedded"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "enigma-embedded-bridge-protocol"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "sha2",
 ]
 
 [[package]]
 name = "enigma-embedded-core"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "enumflags2"
